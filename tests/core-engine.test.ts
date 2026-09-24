@@ -122,7 +122,7 @@ test("code mode finds the integration prefix in both runtimes' tool names", asyn
 });
 
 test("the open-source packages never point at the private repo's docs or internals", () => {
-  // packages/core and packages/mcpmaster are published on their own, so a
+  // packages/core, packages/mcpmaster and packages/mcpv are published on their own, so a
   // comment citing a design doc, a hosted source path or hosted-only
   // infrastructure is a dead reference there (and leaks internals).
   const root = fileURLToPath(new URL("../packages/", import.meta.url));
@@ -140,6 +140,6 @@ test("the open-source packages never point at the private repo's docs or interna
       }
     }
   };
-  for (const pkg of ["core", "mcpmaster"]) walk(join(root, pkg));
+  for (const pkg of ["core", "mcpmaster", "mcpv"]) walk(join(root, pkg));
   assert.deepEqual(offenders, [], offenders.join("\n"));
 });
