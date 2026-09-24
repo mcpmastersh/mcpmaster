@@ -1,0 +1,11 @@
+{
+  "name": "mcpmaster-monorepo",
+  "private": true,
+  "license": "Apache-2.0",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "build": "npm run build --workspace packages/mcpmaster",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test 'tests/**/*.test.ts'"
+  },
+  "engines": { "node": ">=22.18" }
+}

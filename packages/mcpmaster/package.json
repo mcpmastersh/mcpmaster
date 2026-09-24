@@ -1,0 +1,42 @@
+{
+  "name": "mcpmaster",
+  "version": "0.1.0",
+  "description": "Connect your agents to anything. One local MCP endpoint for every OpenAPI, GraphQL and MCP integration you use — with a web UI to manage them.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "mcpmaster": "dist/mcpmaster.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "install.sh"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "openapi",
+    "graphql",
+    "claude",
+    "cursor"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "node scripts/build.mjs",
+    "start": "node dist/mcpmaster.mjs start"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@mcpmaster/core": "0.1.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "esbuild": "^0.28.2",
+    "@jitl/quickjs-singlefile-mjs-release-sync": "0.32.0"
+  }
+}

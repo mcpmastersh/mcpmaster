@@ -1,0 +1,17 @@
+{
+  "name": "@mcpmaster/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The mcpmaster integration engine: turns OpenAPI, GraphQL and MCP sources into MCP tools and dispatches calls to them through one SSRF-safe egress path.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "undici": "^6.28.1",
+    "yaml": "^2.8.1",
+    "quickjs-emscripten-core": "0.32.0",
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0"
+  }
+}
