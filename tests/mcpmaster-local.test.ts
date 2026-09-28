@@ -636,6 +636,8 @@ test("OAuth2 with your own client: browser consent with PKCE, refresh, and clien
   const challenges = new Map<string, string>();
   const tokenRequests: URLSearchParams[] = [];
   const basicAuths: string[] = [];
+  // Clients registered through /register (RFC 7591): public, no secret.
+  const registeredClients = new Map<string, string[]>();
   let issued = 0;
   const expiresIn = 3600;
   const provider = createServer(async (req, res) => {
@@ -657,7 +659,15 @@ test("OAuth2 with your own client: browser consent with PKCE, refresh, and clien
       return json(200, {
         issuer: base, authorization_endpoint: `${base}/authorize`, token_endpoint: `${base}/token`,
         token_endpoint_auth_methods_supported: ["client_secret_basic"], scopes_supported: ["read", "write"],
+        registration_endpoint: `${base}/register`,
       });
+    }
+    if (url.pathname === "/register" && req.method === "POST") {
+      const meta = JSON.parse(body);
+      assert.equal(meta.token_endpoint_auth_method, "none", "mcpmaster registers as a public client");
+      const clientId = `dyn-${registeredClients.size + 1}`;
+      registeredClients.set(clientId, meta.redirect_uris);
+      return json(201, { client_id: clientId, redirect_uris: meta.redirect_uris, token_endpoint_auth_method: "none" });
     }
     if (url.pathname === "/openapi.json") {
       return json(200, {
@@ -674,7 +684,8 @@ test("OAuth2 with your own client: browser consent with PKCE, refresh, and clien
     if (url.pathname === "/authorize") {
       // Stands in for the user approving (or declining) on the consent screen.
       const back = new URL(url.searchParams.get("redirect_uri")!);
-      if (url.searchParams.get("client_id") !== "my-client") back.searchParams.set("error", "unauthorized_client");
+      const dynamic = registeredClients.get(url.searchParams.get("client_id") ?? "");
+      if (url.searchParams.get("client_id") !== "my-client" && !dynamic?.includes(back.toString())) back.searchParams.set("error", "unauthorized_client");
       else if (url.searchParams.get("scope") === "deny") back.searchParams.set("error", "access_denied");
       else {
         assert.equal(url.searchParams.get("code_challenge_method"), "S256");
@@ -696,7 +707,8 @@ test("OAuth2 with your own client: browser consent with PKCE, refresh, and clien
         challenges.delete(form.get("code")!);
         const verifier = form.get("code_verifier") ?? "";
         const expected = createHash("sha256").update(verifier).digest("base64url");
-        if (!challenge || challenge !== expected || form.get("client_secret") !== CLIENT_SECRET) {
+        const publicClient = registeredClients.has(form.get("client_id") ?? "") && !form.has("client_secret");
+        if (!challenge || challenge !== expected || (!publicClient && form.get("client_secret") !== CLIENT_SECRET)) {
           return json(400, { error: "invalid_grant", error_description: "PROVIDER-INTERNAL-DETAIL" });
         }
         return json(200, mint());
@@ -846,17 +858,32 @@ test("OAuth2 with your own client: browser consent with PKCE, refresh, and clien
     assert.equal(miss.status, 400);
     assert.match((await miss.json()).error, /Couldn't find published OAuth settings/);
     // RFC 9728: a resource that only names its authorization server.
+    let resourceBase = "";
     const resource = createServer((req, res) => {
-      if (req.url === "/.well-known/oauth-protected-resource") {
+      // Path-specific, as a server with one resource per path publishes it.
+      if (req.url === "/.well-known/oauth-protected-resource/mcp") {
         res.writeHead(200, { "Content-Type": "application/json" });
-        return res.end(JSON.stringify({ resource: "x", authorization_servers: [base] }));
+        return res.end(JSON.stringify({ resource: `${resourceBase}/mcp`, authorization_servers: [base] }));
       }
       res.writeHead(404).end();
     });
     await new Promise<void>((r) => resource.listen(0, "127.0.0.1", () => r()));
+    resourceBase = `http://127.0.0.1:${(resource.address() as { port: number }).port}`;
     try {
-      const viaResource = await (await discover(`http://127.0.0.1:${(resource.address() as { port: number }).port}/mcp`)).json();
+      const viaResource = await (await discover(`${resourceBase}/mcp`)).json();
       assert.equal(viaResource.tokenUrl, `${base}/token`);
+      assert.equal(viaResource.resource, `${resourceBase}/mcp`, "the resource indicator (RFC 8707) comes from its own metadata");
+      // It's sent on the sign-in, so a server that needs it knows which resource.
+      const withResource = await fetch(`${ui}/api/integrations`, { method: "POST", headers: authed, body: JSON.stringify({
+        input: `${base}/openapi.json`, name: "res", type: "openapi",
+        auth: { type: "oauth2", grant: "authorization_code", authorizeUrl: viaResource.authorizeUrl, tokenUrl: viaResource.tokenUrl, clientId: "my-client", resource: viaResource.resource },
+        clientSecret: CLIENT_SECRET,
+      }) });
+      assert.equal(withResource.status, 201);
+      const resId = (await withResource.json()).integration.id;
+      const { authorizationUrl } = await (await fetch(`${ui}/api/integrations/${resId}/sign-in`, { method: "POST", headers: authed, body: "{}" })).json();
+      assert.equal(new URL(authorizationUrl).searchParams.get("resource"), `${resourceBase}/mcp`);
+      assert.equal((await run(["remove", "res"])).code, 0);
     } finally {
       await new Promise<void>((r) => resource.close(() => r()));
     }
@@ -868,6 +895,31 @@ test("OAuth2 with your own client: browser consent with PKCE, refresh, and clien
     assert.match(discovered.stdout + discovered.stderr, /Found the provider's OAuth settings/);
     assert.equal((await run(["call", "svc2_me"])).code, 0);
     assert.equal((await run(["remove", "svc2"])).code, 0);
+    // No client ID: the provider allows dynamic registration, so mcpmaster
+    // registers itself at sign-in and reuses that client afterwards.
+    const noClient = await fetch(`${ui}/api/integrations`, { method: "POST", headers: authed, body: JSON.stringify({
+      input: `${base}/openapi.json`, name: "dyn", type: "openapi",
+      auth: { type: "oauth2", grant: "authorization_code", authorizeUrl: found.authorizeUrl, tokenUrl: found.tokenUrl, registrationUrl: found.registrationUrl },
+    }) });
+    assert.equal(noClient.status, 201, await noClient.clone().text());
+    const dynId = (await noClient.json()).integration.id;
+    const dynBack = await consent(dynId);
+    assert.equal(new URL(dynBack).searchParams.get("error"), null, dynBack);
+    assert.equal(registeredClients.size, 1);
+    await fetch(dynBack);
+    assert.equal((await state()).integrations.find((i) => i.id === dynId)?.status, "ready");
+    assert.equal((await run(["call", "dyn_me"])).code, 0);
+    await consent(dynId);
+    assert.equal(registeredClients.size, 1, "signing in again reuses the registered client");
+    assert.equal((await run(["remove", "dyn"])).code, 0);
+    // Without a registration endpoint a client ID is still required.
+    const noRegistration = await fetch(`${ui}/api/integrations`, { method: "POST", headers: authed, body: JSON.stringify({
+      input: `${base}/openapi.json`, type: "openapi",
+      auth: { type: "oauth2", grant: "authorization_code", authorizeUrl: found.authorizeUrl, tokenUrl: found.tokenUrl },
+    }) });
+    assert.equal(noRegistration.status, 400);
+    assert.match((await noRegistration.json()).error, /client ID/);
+
     const noMetadata = await run(["add", "http://127.0.0.1:1/openapi.json", "--oauth2", "--client-id", "x", "--type", "openapi"]);
     assert.equal(noMetadata.code, 1);
     assert.match(noMetadata.stderr, /Couldn't find published OAuth settings/);

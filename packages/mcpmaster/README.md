@@ -78,6 +78,13 @@ protected resource naming its authorization server. It looks at the
 integration's URL first, or at `--issuer` if you pass one. Only a provider that
 publishes nothing needs `--token-url` (and `--authorize-url`) by hand.
 
+A browser sign-in doesn't need an OAuth app of your own when the provider
+supports dynamic client registration (RFC 7591, a `registration_endpoint` in
+its metadata). With no `--client-id`, mcpmaster registers itself at sign-in as
+a public PKCE client with this machine's callback as its redirect URI, and
+reuses that registration after that. Pass `--client-id` to use your own app
+instead.
+
 When the provider has a sign-in page it's a browser sign-in (authorization code
 with PKCE), and your browser opens to its consent screen. `--grant
 client_credentials` (or a bare `--token-url`) is machine-to-machine, with no

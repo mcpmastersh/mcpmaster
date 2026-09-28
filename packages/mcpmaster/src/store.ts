@@ -37,7 +37,15 @@ export type SourceAuth =
       tokenUrl: string;
       /** authorization_code: where the browser goes for consent. */
       authorizeUrl?: string;
-      clientId: string;
+      /**
+       * Absent for authorization_code with a registrationUrl: mcpmaster then
+       * registers its own client at sign-in (RFC 7591), kept in secrets.json.
+       */
+      clientId?: string;
+      /** RFC 8707 resource indicator sent with every authorize/token request. */
+      resource?: string;
+      /** The provider's dynamic client registration endpoint (RFC 7591). */
+      registrationUrl?: string;
       /** Space-separated, as the provider expects it. */
       scope?: string;
       /** Send the client id/secret as HTTP Basic instead of in the form body. */
@@ -135,6 +143,8 @@ export type OAuthState = {
  */
 export type OAuth2State = {
   clientSecret?: string;
+  /** A client mcpmaster registered itself (RFC 7591), bound to one redirect URL. */
+  registered?: { clientId: string; clientSecret?: string; basic?: boolean; redirectUrl: string };
   accessToken?: string;
   refreshToken?: string;
   /** Epoch ms; absent when the provider didn't say. */

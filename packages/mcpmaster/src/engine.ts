@@ -456,13 +456,23 @@ function validateOAuth2(auth: Extract<SourceAuth, { type: "oauth2" }>): SourceAu
     throw new EngineError("The OAuth2 grant is client_credentials or authorization_code");
   }
   const clientId = String(auth.clientId ?? "").trim();
-  if (!clientId || clientId.length > 512 || !PRINTABLE.test(clientId)) throw new EngineError("Add the OAuth2 client ID");
+  // No client ID is fine for a browser sign-in with a registration
+  // endpoint: mcpmaster registers its own client then (RFC 7591).
+  const registers = !clientId && auth.grant === "authorization_code" && Boolean(auth.registrationUrl);
+  if (!registers && !clientId) {
+    throw new EngineError(auth.grant === "authorization_code"
+      ? "Add the OAuth2 client ID — this provider doesn't let mcpmaster register one itself"
+      : "Add the OAuth2 client ID");
+  }
+  if (clientId.length > 512 || (clientId && !PRINTABLE.test(clientId))) throw new EngineError("That client ID isn't valid");
   const clean: Extract<SourceAuth, { type: "oauth2" }> = {
     type: "oauth2",
     grant: auth.grant,
     tokenUrl: validateEndpoint(auth.tokenUrl, "token URL"),
-    clientId,
+    ...(clientId ? { clientId } : {}),
   };
+  if (registers) clean.registrationUrl = validateEndpoint(auth.registrationUrl, "registration URL");
+  if (auth.resource) clean.resource = validateEndpoint(auth.resource, "resource");
   if (auth.grant === "authorization_code") {
     if (!auth.authorizeUrl) throw new EngineError("Add the provider's authorization URL");
     clean.authorizeUrl = validateEndpoint(auth.authorizeUrl, "authorization URL");
@@ -1221,7 +1231,7 @@ async function startOAuth2SignIn(source: Source, port: number): Promise<string |
     }
   });
   try {
-    return beginOAuth2(source, oauthRedirectUrl(port));
+    return await beginOAuth2(source, oauthRedirectUrl(port));
   } catch (error) {
     throw new EngineError(error instanceof OAuth2Error ? error.message : "Couldn't start the sign-in");
   }
