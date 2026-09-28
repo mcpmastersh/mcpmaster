@@ -241,6 +241,8 @@ function authFromBody(value: unknown): SourceAuth | undefined {
       tokenUrl: opt("tokenUrl"),
       authorizeUrl: opt("authorizeUrl"),
       clientId: opt("clientId"),
+      registrationUrl: opt("registrationUrl"),
+      resource: opt("resource"),
       scope: opt("scope"),
       clientAuth: opt("clientAuth"),
       clientSecretEnv: opt("clientSecretEnv"),

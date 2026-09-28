@@ -302,7 +302,8 @@ async function readStdin(what = "--token-stdin", example = "printf %s \"$TOKEN\"
 }
 
 const OAUTH2_EXAMPLES = [
-  "mcpmaster add <url> --type openapi --oauth2 --issuer https://idp.example.com --client-id ID --client-secret-env CLIENT_SECRET --scope \"read write\"",
+  "mcpmaster add <url> --type openapi --oauth2 --issuer https://idp.example.com --scope \"read write\"",
+  "mcpmaster add <url> --type openapi --oauth2 --issuer https://idp.example.com --client-id ID --client-secret-env CLIENT_SECRET",
   "mcpmaster add <spec> --oauth2 --authorize-url https://idp.example.com/authorize --token-url https://idp.example.com/token --client-id ID --client-secret-env CLIENT_SECRET",
   "mcpmaster add <spec> --oauth2 --grant client_credentials --token-url https://idp.example.com/token --client-id ID --client-secret-env CLIENT_SECRET",
 ];
@@ -312,14 +313,16 @@ const OAUTH2_EXAMPLES = [
  * the provider's published metadata — at --issuer, else at the integration's
  * own URL. The grant is --grant when given; otherwise an authorization URL
  * (given, or discovered) means a browser consent, and a bare --token-url
- * means client credentials.
+ * means client credentials. A browser sign-in needs no --client-id when the
+ * provider supports dynamic client registration: mcpmaster registers itself.
  */
 async function oauth2FromFlags(p: Parsed, input: string): Promise<Pick<AddSourceInput, "auth" | "clientSecret"> & { discoveredFrom?: string }> {
   let tokenUrl = flag(p, "token-url");
   let discoveredFrom: string | undefined;
   let authorizeUrl = flag(p, "authorize-url");
   const clientId = flag(p, "client-id");
-  if (!clientId) throw new CliError("--oauth2 needs --client-id", OAUTH2_EXAMPLES, 2);
+  let registrationUrl: string | undefined;
+  let resource: string | undefined;
   const grantFlag = flag(p, "grant");
   if (grantFlag !== undefined && grantFlag !== "authorization_code" && grantFlag !== "client_credentials") {
     throw new CliError("--grant is authorization_code or client_credentials", [], 2);
@@ -329,7 +332,7 @@ async function oauth2FromFlags(p: Parsed, input: string): Promise<Pick<AddSource
 
   const issuer = flag(p, "issuer") ?? (/^https?:\/\//i.test(input) ? input : undefined);
   const wantsBrowser = grantFlag === "authorization_code" || (grantFlag === undefined && !tokenUrl);
-  if (!tokenUrl || (wantsBrowser && !authorizeUrl)) {
+  if (!tokenUrl || (wantsBrowser && !authorizeUrl) || (!clientId && grantFlag !== "client_credentials")) {
     if (!issuer) throw new CliError("--oauth2 needs --issuer, or --token-url (and --authorize-url for a browser sign-in)", OAUTH2_EXAMPLES, 2);
     let found;
     try {
@@ -345,12 +348,19 @@ async function oauth2FromFlags(p: Parsed, input: string): Promise<Pick<AddSource
     tokenUrl ??= found.tokenUrl;
     if (wantsBrowser) authorizeUrl ??= found.authorizeUrl;
     if (clientAuth === undefined && found.clientAuth) clientAuth = found.clientAuth;
+    registrationUrl = found.registrationUrl;
+    resource = found.resource;
     discoveredFrom = found.metadataUrl;
     if (wantsBrowser && !authorizeUrl && grantFlag === "authorization_code") {
       throw new CliError("The provider doesn't publish an authorization URL — pass --authorize-url", OAUTH2_EXAMPLES, 2);
     }
   }
   const grant = grantFlag ?? (authorizeUrl ? "authorization_code" : "client_credentials");
+  if (!clientId && !(grant === "authorization_code" && registrationUrl)) {
+    throw new CliError(grant === "authorization_code"
+      ? "--oauth2 needs --client-id: this provider doesn't let mcpmaster register a client itself"
+      : "--oauth2 needs --client-id for client credentials", OAUTH2_EXAMPLES, 2);
+  }
   const clientSecretEnv = flag(p, "client-secret-env");
   if (clientSecretEnv && has(p, "client-secret-stdin")) throw new CliError("Pick one of --client-secret-env or --client-secret-stdin", [], 2);
   const clientSecret = has(p, "client-secret-stdin")
@@ -366,6 +376,8 @@ async function oauth2FromFlags(p: Parsed, input: string): Promise<Pick<AddSource
       tokenUrl: tokenUrl!,
       authorizeUrl: grant === "authorization_code" ? authorizeUrl : undefined,
       clientId,
+      registrationUrl: clientId ? undefined : registrationUrl,
+      resource,
       scope: flag(p, "scope"),
       clientAuth: clientAuth === "basic" ? "basic" : undefined,
       clientSecretEnv,
@@ -685,8 +697,9 @@ async function signInFlow(source: Source, p: Parsed): Promise<Source> {
   const { port } = await ensureBackground(portFlag(p));
   const url = await startSignIn(source.id, port);
   if (url) {
-    if (source.auth.type === "oauth2") {
+    if (source.auth.type === "oauth2" && source.auth.clientId) {
       // The user's own client: the provider only redirects to URIs registered on it.
+      // (A client mcpmaster registered itself already carries this one.)
       say(row("info", "Redirect URI", oauthRedirectUrl(port)));
       say(note("register this exact URI on your OAuth app if the provider rejects the sign-in"));
     }
@@ -916,7 +929,8 @@ function help(): void {
   cmd("--read-only | --hide-new-tools", "Start with read-only / new-tool review on");
   say();
   say(`  ${bold("OAUTH2 FLAGS")} ${muted("(an OAuth app you registered with the provider)")}`);
-  cmd("--oauth2 --client-id ID", "Use OAuth2 with your client");
+  cmd("--oauth2", "Use OAuth2 (endpoints are discovered)");
+  cmd("--client-id ID", "Your OAuth app — optional when the provider allows registration");
   cmd("--issuer URL", "Find the endpoints the provider publishes (default: the integration URL)");
   cmd("--token-url URL", "…or give the token endpoint (client credentials)");
   cmd("--authorize-url URL", "…and the authorization URL (browser consent, PKCE)");

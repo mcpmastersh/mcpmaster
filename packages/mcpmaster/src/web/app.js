@@ -362,8 +362,8 @@ function sidebar(active) {
 // ---------------------------------------------------------------------------
 
 const EXAMPLES = [
-  { label: "Petstore · OpenAPI", input: "https://petstore3.swagger.io/api/v3/openapi.json" },
-  { label: "Countries · GraphQL", input: "https://countries.trevorblades.com/graphql" },
+  { label: "Petstore · OpenAPI", input: "https://petstore3.swagger.io/api/v3/openapi.json", type: "openapi" },
+  { label: "Countries · GraphQL", input: "https://countries.trevorblades.com/graphql", type: "graphql" },
   { label: "Filesystem · local MCP", input: "npx -y @modelcontextprotocol/server-filesystem ~" },
   { label: "Memory · local MCP", input: "npx -y @modelcontextprotocol/server-memory" },
 ];
@@ -381,7 +381,7 @@ function oauth2Form(auth) {
   const a = auth && auth.type === "oauth2" ? auth : {};
   return {
     grant: a.grant || "authorization_code", authorizeUrl: a.authorizeUrl || "", tokenUrl: a.tokenUrl || "",
-    clientId: a.clientId || "", scope: a.scope || "", basic: a.clientAuth === "basic",
+    clientId: a.clientId || "", registrationUrl: a.registrationUrl || "", resource: a.resource || "", scope: a.scope || "", basic: a.clientAuth === "basic",
     useEnv: Boolean(a.clientSecretEnv), secretEnv: a.clientSecretEnv || "", secret: "",
     issuer: "", lookup: null, autoFor: "", manual: false,
   };
@@ -406,6 +406,8 @@ async function findOAuth2Endpoints(o, url, paint, auto = false) {
     if (auto && o.autoFor !== url) return; // the URL changed meanwhile
     o.authorizeUrl = found.authorizeUrl || "";
     o.tokenUrl = found.tokenUrl;
+    o.registrationUrl = found.registrationUrl || "";
+    o.resource = found.resource || "";
     if (found.clientAuth === "basic") o.basic = true;
     try { host = new URL(found.metadataUrl).host; } catch { /* keep the one asked */ }
     o.manual = false;
@@ -413,6 +415,8 @@ async function findOAuth2Endpoints(o, url, paint, auto = false) {
   } catch (e) {
     if (auto && o.autoFor !== url) return;
     o.manual = true;
+    o.registrationUrl = "";
+    o.resource = "";
     o.lookup = {
       auto,
       miss: auto
@@ -431,6 +435,9 @@ function oauth2Fields(o, paint, editing = false, guess = "") {
   const text = (id, label, key, placeholder) => h("div", { class: "field" }, h("label", { for: id }, label),
     h("input", { type: "text", id, value: o[key], placeholder, autocomplete: "off", spellcheck: "false", oninput: (e) => { o[key] = e.target.value; } }));
   const redirect = store.state && store.state.oauthRedirectUrl;
+  // A browser sign-in with nothing of the user's own: mcpmaster registers a client.
+  const registers = browser && Boolean(o.registrationUrl);
+  const ownClient = !registers || Boolean(o.clientId.trim());
 
   // Look the URL up once, and again when it changes — unless the user has
   // taken over, or (editing) the endpoints are already set.
@@ -438,7 +445,7 @@ function oauth2Fields(o, paint, editing = false, guess = "") {
     // What an earlier lookup filled in is replaced; what the user typed isn't.
     const stale = o.lookup && o.lookup.auto && o.lookup.found;
     if (stale || (!o.tokenUrl && !o.authorizeUrl)) {
-      if (stale) { o.tokenUrl = ""; o.authorizeUrl = ""; }
+      if (stale) { o.tokenUrl = ""; o.authorizeUrl = ""; o.registrationUrl = ""; o.resource = ""; }
       o.autoFor = guess;
       o.lookup = { busy: true, auto: true };
       setTimeout(() => findOAuth2Endpoints(o, guess, paint, true), 0);
@@ -453,7 +460,8 @@ function oauth2Fields(o, paint, editing = false, guess = "") {
     : found
       ? h("div", { class: "field" }, h("label", {}, "Endpoints"),
         h("div", { class: "found-box" },
-          h("div", { class: "hint ok", role: "status" }, `Found ${lookup.host}'s published OAuth settings`),
+          h("div", { class: "hint ok", role: "status" }, `Found ${lookup.host}'s published OAuth settings`,
+            browser && o.registrationUrl ? " — no OAuth app needed, mcpmaster registers itself when you sign in." : ""),
           h("dl", { class: "kv" },
             browser ? [h("dt", {}, "Authorization"), h("dd", { class: "mono" }, o.authorizeUrl)] : null,
             h("dt", {}, "Token"), h("dd", { class: "mono" }, o.tokenUrl)),
@@ -478,8 +486,13 @@ function oauth2Fields(o, paint, editing = false, guess = "") {
         ? "You approve access once on the provider's consent screen (authorization code with PKCE). Tokens refresh on their own."
         : "Machine-to-machine: mcpmaster trades the client ID and secret for a token. No sign-in.")),
     endpoints,
-    text("o-client", "Client ID", "clientId", ""),
     h("div", { class: "field" },
+      h("label", { for: "o-client" }, registers ? "Client ID (optional)" : "Client ID"),
+      h("input", { type: "text", id: "o-client", value: o.clientId, autocomplete: "off", spellcheck: "false",
+        placeholder: registers ? "Leave empty to have mcpmaster register itself" : "",
+        oninput: (e) => { o.clientId = e.target.value; }, onchange: () => paint() }),
+      registers ? h("div", { class: "hint" }, "The provider supports dynamic client registration, so mcpmaster can sign in without an OAuth app of your own. Enter a client ID only to use yours.") : null),
+    !ownClient ? null : h("div", { class: "field" },
       h("label", { for: "o-secret" }, o.useEnv ? "Client secret: environment variable" : browser ? "Client secret (leave empty for a public client)" : "Client secret"),
       o.useEnv
         ? h("input", { type: "text", id: "o-secret", value: o.secretEnv, placeholder: "CLIENT_SECRET", spellcheck: "false", oninput: (e) => { o.secretEnv = e.target.value; } })
@@ -490,10 +503,10 @@ function oauth2Fields(o, paint, editing = false, guess = "") {
     text("o-scope", "Scopes (optional)", "scope", "read write"),
     lookup.scopes && lookup.scopes.length ? h("div", { class: "hint scopes" }, "Offered: ",
       lookup.scopes.slice(0, 16).join(" "), lookup.scopes.length > 16 ? ` … ${lookup.scopes.length - 16} more` : "") : null,
-    h("div", { class: "field checks" },
+    !ownClient ? null : h("div", { class: "field checks" },
       h("label", { class: "check" }, h("input", { type: "checkbox", checked: o.basic, onchange: (e) => { o.basic = e.target.checked; } }),
         " Send the client ID and secret as HTTP Basic (some providers require it)")),
-    browser && redirect ? h("div", { class: "field" }, h("label", {}, "Redirect URI"), codeBlock(redirect),
+    browser && redirect && ownClient ? h("div", { class: "field" }, h("label", {}, "Redirect URI"), codeBlock(redirect),
       h("div", { class: "hint" }, "Register this exact URI on your OAuth app. It points at this machine, so the sign-in code never leaves it.")) : null);
 }
 
@@ -503,18 +516,21 @@ function oauth2Payload(o, editing = false) {
   if (o.lookup && o.lookup.busy) return { error: "Still looking up the provider's OAuth settings — one moment." };
   if (browser && !o.authorizeUrl.trim()) return { error: "Add the provider's authorization URL." };
   if (!o.tokenUrl.trim()) return { error: "Add the provider's token URL." };
-  if (!o.clientId.trim()) return { error: "Add the client ID." };
-  if (o.useEnv && !o.secretEnv.trim()) return { error: "Name the environment variable." };
+  const registers = browser && Boolean(o.registrationUrl) && !o.clientId.trim();
+  if (!o.clientId.trim() && !registers) return { error: "Add the client ID." };
+  if (!registers && o.useEnv && !o.secretEnv.trim()) return { error: "Name the environment variable." };
   if (!browser && !o.useEnv && !o.secret && !editing) return { error: "Client credentials need the client secret." };
   const auth = {
-    type: "oauth2", grant: o.grant, tokenUrl: o.tokenUrl.trim(), clientId: o.clientId.trim(),
+    type: "oauth2", grant: o.grant, tokenUrl: o.tokenUrl.trim(), clientId: o.clientId.trim() || undefined,
+    registrationUrl: registers ? o.registrationUrl : undefined, resource: o.resource || undefined,
     authorizeUrl: browser ? o.authorizeUrl.trim() : undefined, scope: o.scope.trim() || undefined,
-    clientAuth: o.basic ? "basic" : undefined, clientSecretEnv: o.useEnv ? o.secretEnv.trim() : undefined,
+    // A registered client's own auth method comes from its registration.
+    clientAuth: o.basic && !registers ? "basic" : undefined, clientSecretEnv: o.useEnv && !registers ? o.secretEnv.trim() : undefined,
   };
-  return { auth, clientSecret: !o.useEnv && o.secret ? o.secret : undefined };
+  return { auth, clientSecret: !registers && !o.useEnv && o.secret ? o.secret : undefined };
 }
 
-function addDialog(initialInput = "") {
+function addDialog(initialInput = "", initialType = "") {
   openDialog((close) => {
     const form = { input: initialInput, name: "", type: "", authType: "none", token: "", useEnv: false, envName: "", header: "", env: [], readOnly: false, hideNewTools: false, oauth2: oauth2Form() };
     let detected = null;
@@ -525,18 +541,18 @@ function addDialog(initialInput = "") {
     const detectedEl = h("div", { class: "detected" });
     const nameEl = h("input", { type: "text", id: "add-name", autocomplete: "off", spellcheck: "false", placeholder: "auto" });
     const typeEl = h("select", { id: "add-type" },
-      h("option", { value: "" }, "Detect automatically"),
+      h("option", { value: "", disabled: true, selected: true }, "Choose a type"),
       h("option", { value: "openapi" }, "OpenAPI"),
       h("option", { value: "graphql" }, "GraphQL"),
       h("option", { value: "mcp" }, "MCP server (remote)"));
-    const typeHint = h("div", { class: "hint" });
+    if (initialType) typeEl.value = initialType;
     const errorEl = h("div", { class: "field-error", role: "alert" });
     const authArea = h("div");
     const envArea = h("div");
     const submit = h("button", { class: "btn btn-primary", type: "submit" }, "Connect");
 
     const kindText = {
-      url: "A URL — mcpmaster will work out whether it's OpenAPI, GraphQL or an MCP server.",
+      url: "A URL — choose whether it's OpenAPI, GraphQL or an MCP server.",
       file: "A local OpenAPI spec file.",
       command: "A command — it runs on this machine as a local MCP server.",
     };
@@ -570,16 +586,6 @@ function addDialog(initialInput = "") {
     function paint() {
       const isCommand = detected && detected.kind === "command";
       typeEl.parentElement.hidden = !detected || detected.kind !== "url";
-      // Browser sign-in comes after adding, so there's no token to probe the
-      // URL with yet: its type must be chosen rather than detected.
-      const mustChooseType = form.authType === "oauth2" && form.oauth2.grant === "authorization_code";
-      const detectOption = typeEl.options[0];
-      detectOption.textContent = mustChooseType ? "Choose a type" : "Detect automatically";
-      detectOption.disabled = mustChooseType;
-      typeHint.textContent = mustChooseType ? "Required with browser sign-in: mcpmaster can't look at the URL until you've signed in." : "";
-      if (detected && detected.kind === "url") {
-        detectedEl.replaceChildren(h("span", { class: "badge type" }, "url"), mustChooseType ? "A URL — choose whether it's OpenAPI, GraphQL or an MCP server." : kindText.url);
-      }
       authArea.hidden = isCommand;
       envArea.hidden = !isCommand;
 
@@ -616,7 +622,7 @@ function addDialog(initialInput = "") {
       const body = { input: form.input, readOnly: form.readOnly, hideNewTools: form.hideNewTools };
       if (nameEl.value.trim()) body.name = nameEl.value.trim();
       if (typeEl.value && detected && detected.kind === "url") body.type = typeEl.value;
-      if (detected && detected.kind === "url" && !typeEl.value && form.authType === "oauth2" && form.oauth2.grant === "authorization_code") {
+      if (detected && detected.kind === "url" && !typeEl.value) {
         errorEl.textContent = "Choose its type — OpenAPI, GraphQL or MCP server.";
         typeEl.focus();
         return;
@@ -660,7 +666,7 @@ function addDialog(initialInput = "") {
       h("p", { class: "desc" }, "Paste an OpenAPI spec URL or file, a GraphQL endpoint, an MCP server URL, or a command that starts a local MCP server."),
       h("div", { class: "field" }, h("label", { for: "add-input" }, "What should agents connect to?"), inputEl, detectedEl),
       h("div", { class: "field" }, h("label", { for: "add-name" }, "Name"), nameEl, h("div", { class: "hint" }, "Also the prefix on its tools, e.g. github_list_repos.")),
-      h("div", { class: "field", hidden: true }, h("label", { for: "add-type" }, "Type"), typeEl, typeHint),
+      h("div", { class: "field", hidden: true }, h("label", { for: "add-type" }, "Type"), typeEl),
       authArea,
       envArea,
       h("div", { class: "field checks" },
@@ -685,7 +691,7 @@ function pasteBox() {
     h("form", { class: "paste", onsubmit: (e) => { e.preventDefault(); addDialog(input.value.trim()); } },
       input, h("button", { class: "btn btn-primary", type: "submit" }, icon("plus"), "Connect")),
     h("div", { class: "chips" }, h("span", { class: "hint" }, "Try:"),
-      EXAMPLES.map((ex) => h("button", { class: "chip", type: "button", onclick: () => addDialog(ex.input) }, ex.label))));
+      EXAMPLES.map((ex) => h("button", { class: "chip", type: "button", onclick: () => addDialog(ex.input, ex.type) }, ex.label))));
 }
 
 function integrationsPage() {
@@ -830,7 +836,7 @@ function integrationPage(page, params, id) {
             : `Sign in through ${host} to let mcpmaster call it for your agents.`
           : `Client credentials${auth.clientSecretEnv ? `, secret read from $${auth.clientSecretEnv}` : ""}. mcpmaster fetches and renews tokens itself.`),
         h("dl", { class: "kv" },
-          h("dt", {}, "Client ID"), h("dd", { class: "mono" }, auth.clientId),
+          h("dt", {}, "Client ID"), auth.clientId ? h("dd", { class: "mono" }, auth.clientId) : h("dd", { class: "muted" }, "Registered by mcpmaster"),
           h("dt", {}, "Token URL"), h("dd", { class: "mono" }, auth.tokenUrl),
           auth.scope ? [h("dt", {}, "Scopes"), h("dd", { class: "mono" }, auth.scope)] : null,
           browser ? null : [h("dt", {}, "Client secret"), h("dd", {}, ok
