@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   EngineError,
+  discoverOAuth2Endpoints,
+  OAUTH2_NEEDS_TYPE,
   addSource,
   aggregateTools,
   DEFAULT_PAGE_SIZE,
@@ -36,6 +38,8 @@ import {
   startSignIn,
   syncSource,
   updateSource,
+  oauthRedirectUrl,
+  SIGN_IN_WAITING,
   type AddSourceInput,
 } from "./engine.ts";
 import { createMcpServer } from "./mcp.ts";
@@ -66,7 +70,11 @@ import { VERSION } from "./version.ts";
 type Parsed = { positionals: string[]; rest: string[]; flags: Map<string, string[]> };
 
 /** Flags that take a value; everything else is boolean. */
-const VALUE_FLAGS = new Set(["name", "type", "port", "token-env", "header", "env", "api-key", "integration", "access", "limit", "offset"]);
+const VALUE_FLAGS = new Set([
+  "name", "type", "port", "token-env", "header", "env", "api-key", "integration", "access", "limit", "offset",
+  "token-url", "authorize-url", "client-id", "client-secret-env", "scope", "client-auth",
+  "issuer", "grant",
+]);
 
 function parseArgs(argv: string[]): Parsed {
   const positionals: string[] = [];
@@ -151,11 +159,14 @@ async function ensureBackground(port: number): Promise<{ port: number; started: 
 }
 
 function openBrowser(url: string): void {
+  // Never through a shell: `cmd /c start` would treat the `&` between query
+  // parameters as a command separator, and an OAuth URL can come from a
+  // remote server's metadata.
   const [cmd, args] =
     process.platform === "darwin"
       ? ["open", [url]]
       : process.platform === "win32"
-        ? ["cmd", ["/c", "start", "", url]]
+        ? ["rundll32", ["url.dll,FileProtocolHandler", url]]
         : ["xdg-open", [url]];
   try {
     spawn(cmd, args, { stdio: "ignore", detached: true }).on("error", () => {}).unref();
@@ -283,16 +294,97 @@ function typeFlag(p: Parsed): SourceType | undefined {
   return type as SourceType;
 }
 
-async function readStdin(): Promise<string> {
-  if (process.stdin.isTTY) throw new CliError("--token-stdin needs the token piped in", ["printf %s \"$TOKEN\" | mcpmaster add … --bearer --token-stdin"], 2);
+async function readStdin(what = "--token-stdin", example = "printf %s \"$TOKEN\" | mcpmaster add … --bearer --token-stdin"): Promise<string> {
+  if (process.stdin.isTTY) throw new CliError(`${what} needs the value piped in`, [example], 2);
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
   return Buffer.concat(chunks).toString("utf8").trim();
 }
 
-async function authFromFlags(p: Parsed): Promise<Pick<AddSourceInput, "auth" | "token">> {
+const OAUTH2_EXAMPLES = [
+  "mcpmaster add <url> --type openapi --oauth2 --issuer https://idp.example.com --client-id ID --client-secret-env CLIENT_SECRET --scope \"read write\"",
+  "mcpmaster add <spec> --oauth2 --authorize-url https://idp.example.com/authorize --token-url https://idp.example.com/token --client-id ID --client-secret-env CLIENT_SECRET",
+  "mcpmaster add <spec> --oauth2 --grant client_credentials --token-url https://idp.example.com/token --client-id ID --client-secret-env CLIENT_SECRET",
+];
+
+/**
+ * OAuth2 with the user's own client. Endpoints not given are looked up from
+ * the provider's published metadata — at --issuer, else at the integration's
+ * own URL. The grant is --grant when given; otherwise an authorization URL
+ * (given, or discovered) means a browser consent, and a bare --token-url
+ * means client credentials.
+ */
+async function oauth2FromFlags(p: Parsed, input: string): Promise<Pick<AddSourceInput, "auth" | "clientSecret"> & { discoveredFrom?: string }> {
+  let tokenUrl = flag(p, "token-url");
+  let discoveredFrom: string | undefined;
+  let authorizeUrl = flag(p, "authorize-url");
+  const clientId = flag(p, "client-id");
+  if (!clientId) throw new CliError("--oauth2 needs --client-id", OAUTH2_EXAMPLES, 2);
+  const grantFlag = flag(p, "grant");
+  if (grantFlag !== undefined && grantFlag !== "authorization_code" && grantFlag !== "client_credentials") {
+    throw new CliError("--grant is authorization_code or client_credentials", [], 2);
+  }
+  let clientAuth = flag(p, "client-auth");
+  if (clientAuth !== undefined && clientAuth !== "basic" && clientAuth !== "post") throw new CliError("--client-auth is basic or post", [], 2);
+
+  const issuer = flag(p, "issuer") ?? (/^https?:\/\//i.test(input) ? input : undefined);
+  const wantsBrowser = grantFlag === "authorization_code" || (grantFlag === undefined && !tokenUrl);
+  if (!tokenUrl || (wantsBrowser && !authorizeUrl)) {
+    if (!issuer) throw new CliError("--oauth2 needs --issuer, or --token-url (and --authorize-url for a browser sign-in)", OAUTH2_EXAMPLES, 2);
+    let found;
+    try {
+      found = await discoverOAuth2Endpoints(issuer);
+    } catch (error) {
+      if (!(error instanceof EngineError)) throw error;
+      let host = issuer;
+      try { host = new URL(issuer).host; } catch { /* as given */ }
+      throw new CliError(error.message.startsWith("Couldn't find")
+        ? `Couldn't find published OAuth settings at ${host} — pass the provider's --issuer, or --token-url (and --authorize-url for a browser sign-in)`
+        : error.message, OAUTH2_EXAMPLES, 1);
+    }
+    tokenUrl ??= found.tokenUrl;
+    if (wantsBrowser) authorizeUrl ??= found.authorizeUrl;
+    if (clientAuth === undefined && found.clientAuth) clientAuth = found.clientAuth;
+    discoveredFrom = found.metadataUrl;
+    if (wantsBrowser && !authorizeUrl && grantFlag === "authorization_code") {
+      throw new CliError("The provider doesn't publish an authorization URL — pass --authorize-url", OAUTH2_EXAMPLES, 2);
+    }
+  }
+  const grant = grantFlag ?? (authorizeUrl ? "authorization_code" : "client_credentials");
+  const clientSecretEnv = flag(p, "client-secret-env");
+  if (clientSecretEnv && has(p, "client-secret-stdin")) throw new CliError("Pick one of --client-secret-env or --client-secret-stdin", [], 2);
+  const clientSecret = has(p, "client-secret-stdin")
+    ? await readStdin("--client-secret-stdin", "printf %s \"$CLIENT_SECRET\" | mcpmaster add … --oauth2 … --client-secret-stdin")
+    : undefined;
+  if (grant === "client_credentials" && !clientSecretEnv && !clientSecret) {
+    throw new CliError("Client credentials need the client secret: --client-secret-env NAME or --client-secret-stdin", OAUTH2_EXAMPLES, 2);
+  }
+  return {
+    auth: {
+      type: "oauth2",
+      grant,
+      tokenUrl: tokenUrl!,
+      authorizeUrl: grant === "authorization_code" ? authorizeUrl : undefined,
+      clientId,
+      scope: flag(p, "scope"),
+      clientAuth: clientAuth === "basic" ? "basic" : undefined,
+      clientSecretEnv,
+    },
+    clientSecret,
+    discoveredFrom,
+  };
+}
+
+async function authFromFlags(p: Parsed, input: string): Promise<Pick<AddSourceInput, "auth" | "token" | "clientSecret"> & { discoveredFrom?: string }> {
   const bearer = has(p, "bearer");
   const apiKey = has(p, "api-key");
+  if (has(p, "oauth2")) {
+    if (bearer || apiKey) throw new CliError("Pick one of --bearer, --api-key or --oauth2", [], 2);
+    return oauth2FromFlags(p, input);
+  }
+  if (["token-url", "authorize-url", "issuer", "grant", "client-id", "client-secret-env", "client-secret-stdin"].some((f) => has(p, f))) {
+    throw new CliError("OAuth2 settings need --oauth2", OAUTH2_EXAMPLES, 2);
+  }
   if (!bearer && !apiKey) {
     if (has(p, "token-env") || has(p, "token-stdin")) throw new CliError("Say how to send the token: --bearer or --api-key", [], 2);
     return {};
@@ -334,9 +426,13 @@ async function cmdAdd(p: Parsed): Promise<void> {
     ], 2);
   }
   const input = parts.length === 1 ? parts[0] : parts.map(quoteArg).join(" ");
-  const auth = await authFromFlags(p);
+  const { discoveredFrom, ...auth } = await authFromFlags(p, input);
+  if (auth.auth?.type === "oauth2" && auth.auth.grant === "authorization_code" && !typeFlag(p) && /^https?:\/\//i.test(input)) {
+    throw new CliError(OAUTH2_NEEDS_TYPE, [`mcpmaster add ${quoteArg(input)} --type openapi|graphql|mcp --oauth2 …`], 2);
+  }
   const json = has(p, "json");
   if (!json) say(heading("add", input));
+  if (!json && discoveredFrom) say(row("info", "Found the provider's OAuth settings", discoveredFrom));
   const spin = json ? { stop() {} } : spinner("Connecting and reading its tools…");
   let source: Source;
   try {
@@ -360,7 +456,7 @@ async function cmdAdd(p: Parsed): Promise<void> {
     say();
     say(row("info", `${bold(source.name)} uses OAuth`, "opening its sign-in page"));
     const signedIn = await signInFlow(source, p);
-    say(row("ok", `Connected ${bold(signedIn.name)}`, `mcp · ${signedIn.toolCount} tools`));
+    say(row("ok", `Connected ${bold(signedIn.name)}`, `${signedIn.type} · ${signedIn.toolCount} tools`));
     say();
     say(action(`mcpmaster tools ${signedIn.name}`, "see what agents can call"));
     return;
@@ -589,6 +685,11 @@ async function signInFlow(source: Source, p: Parsed): Promise<Source> {
   const { port } = await ensureBackground(portFlag(p));
   const url = await startSignIn(source.id, port);
   if (url) {
+    if (source.auth.type === "oauth2") {
+      // The user's own client: the provider only redirects to URIs registered on it.
+      say(row("info", "Redirect URI", oauthRedirectUrl(port)));
+      say(note("register this exact URI on your OAuth app if the provider rejects the sign-in"));
+    }
     say(row("info", "Sign in", url));
     if (process.stdout.isTTY || process.stderr.isTTY) openBrowser(url);
     const spin = spinner("Waiting for you to finish signing in…");
@@ -600,6 +701,8 @@ async function signInFlow(source: Source, p: Parsed): Promise<Source> {
         if (!current) throw new CliError("That integration was removed while signing in");
         if (current.status === "ready") return current;
         if (current.status === "failed") throw new CliError(current.error ?? "The sign-in didn't finish", [`mcpmaster login ${source.name}`]);
+        // Declined at the provider, or the code exchange failed.
+        if (current.error && current.error !== SIGN_IN_WAITING) throw new CliError(current.error, [`mcpmaster login ${source.name}`]);
       }
     } finally {
       spin.stop();
@@ -622,6 +725,11 @@ async function cmdLogin(p: Parsed): Promise<void> {
 async function cmdLogout(p: Parsed): Promise<void> {
   const source = requireSource(p.positionals[0], "logout");
   await signOut(source.id);
+  if (source.auth.type === "oauth2") {
+    say(row("ok", `Signed out of ${source.name}`, "its tokens are deleted"));
+    say(action(`mcpmaster login ${source.name}`, "sign in again"));
+    return;
+  }
   say(row("ok", `Signed out of ${source.name}`, "its client registration and tokens are deleted"));
   say(action(`mcpmaster login ${source.name}`, "sign in again (registers a new client)"));
 }
@@ -793,7 +901,7 @@ function help(): void {
   cmd("sync [name]", "Re-read an integration's tools");
   cmd("enable | disable <name>", "Expose or hide an integration");
   cmd("policy <name> [--read-only] [--hide-new-tools]", "Read-only, review new tools (--approve)");
-  cmd("login | logout <name>", "OAuth sign-in for a remote MCP server (always fresh)");
+  cmd("login | logout <name>", "OAuth sign-in: a remote MCP server, or an --oauth2 integration");
   cmd("remove <name>", "Delete an integration and its credential");
   cmd("settings", "Tool mode (execute | all), private network access");
   cmd("start | stop | status", "Run in the foreground, stop, inspect");
@@ -806,6 +914,17 @@ function help(): void {
   cmd("--token-env NAME | --token-stdin", "Where the credential comes from");
   cmd("--env KEY=VALUE", "Environment for a local command (repeatable)");
   cmd("--read-only | --hide-new-tools", "Start with read-only / new-tool review on");
+  say();
+  say(`  ${bold("OAUTH2 FLAGS")} ${muted("(an OAuth app you registered with the provider)")}`);
+  cmd("--oauth2 --client-id ID", "Use OAuth2 with your client");
+  cmd("--issuer URL", "Find the endpoints the provider publishes (default: the integration URL)");
+  cmd("--token-url URL", "…or give the token endpoint (client credentials)");
+  cmd("--authorize-url URL", "…and the authorization URL (browser consent, PKCE)");
+  cmd("--grant client_credentials", "Machine-to-machine even when a sign-in page exists");
+  cmd("--client-secret-env NAME", "Read the client secret from the environment");
+  cmd("--client-secret-stdin", "…or pipe it in to store it");
+  cmd("--scope \"a b\"", "Scopes to request");
+  cmd("--client-auth basic", "Send the client as HTTP Basic");
   say();
   say(`  ${muted("Global: --json (machine output) · --plain (no color) · MCPMASTER_HOME (state dir)")}`);
 }

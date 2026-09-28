@@ -25,6 +25,19 @@ import { EXECUTE_TOOL_NAME, buildExecuteTool, createCodeModeHandler } from "../.
 import { runInSandbox } from "../../core/src/sandbox.ts";
 import { OAuthError, beginOAuth, completeOAuth, forgetOAuth, oauthAccessToken, requiresOAuth } from "./oauth.ts";
 import {
+  OAuth2Error,
+  abandonOAuth2,
+  beginOAuth2,
+  completeOAuth2,
+  discoverOAuth2,
+  findOAuth2Pending,
+  forgetOAuth2Tokens,
+  invalidateOAuth2AccessToken,
+  oauth2AccessToken,
+  oauth2Configured,
+  type OAuth2Discovery,
+} from "./oauth2.ts";
+import {
   SOURCE_NAME_PATTERN,
   deleteToolCache,
   loadConfig,
@@ -154,7 +167,7 @@ export function suggestName(target: Target): string {
 // ---------------------------------------------------------------------------
 
 function credentialFor(source: Source, secret: SourceSecret): string | undefined {
-  if (source.auth.type === "none" || source.auth.type === "oauth") return undefined;
+  if (source.auth.type !== "bearer" && source.auth.type !== "api_key") return undefined;
   if (source.auth.env) return process.env[source.auth.env] || undefined;
   return secret.token || undefined;
 }
@@ -165,6 +178,14 @@ export async function resolveAuth(source: Source): Promise<OutboundAuth & { need
     const result = await oauthAccessToken(source);
     if ("error" in result) return { headers: {}, secrets: [], error: result.error, needsAuth: true };
     return { headers: { Authorization: `Bearer ${result.token}` }, secrets: [result.token] };
+  }
+  if (source.auth.type === "oauth2") {
+    const result = await oauth2AccessToken(source);
+    if (!result.ok) {
+      if (result.needsAuth && source.status === "ready") markNeedsAuth(source.id);
+      return { headers: {}, secrets: [], error: result.error, needsAuth: result.needsAuth };
+    }
+    return { headers: { Authorization: `Bearer ${result.token}` }, secrets: result.secrets };
   }
   const credential = credentialFor(source, loadSecret(source.id));
   if (!credential) {
@@ -267,7 +288,11 @@ export async function closeAllStdio(): Promise<void> {
 // Translation (sync)
 // ---------------------------------------------------------------------------
 
-type Translation = { ok: true; cache: ToolCache } | { ok: false; error: string; needsAuth?: boolean };
+/**
+ * `needsAuth` on success: the tools were read, but calling them needs a
+ * sign-in first (an OpenAPI spec is public even when its API isn't).
+ */
+type Translation = { ok: true; cache: ToolCache; needsAuth?: string } | { ok: false; error: string; needsAuth?: boolean };
 
 function readSpecFile(path: string): string {
   let size: number;
@@ -283,7 +308,10 @@ function readSpecFile(path: string): string {
 async function translate(source: Source): Promise<Translation> {
   applySettings();
   const auth = await resolveAuth(source);
-  if (auth.error) return { ok: false, error: auth.error, needsAuth: auth.needsAuth };
+  // Reading an OpenAPI spec never sends the credential, so a consent that
+  // hasn't happened yet doesn't stop us listing its tools.
+  const pendingSignIn = auth.error && auth.needsAuth && source.type === "openapi" ? auth.error : undefined;
+  if (auth.error && !pendingSignIn) return { ok: false, error: auth.error, needsAuth: auth.needsAuth };
 
   if (source.type === "stdio") {
     try {
@@ -323,7 +351,8 @@ async function translate(source: Source): Promise<Translation> {
     result = await fetchAndTranslateMcpServer(url, auth.headers);
   }
   if (!result.ok) return result;
-  return { ok: true, cache: scrub({ tools: result.tools as StoredTool[], baseUrl: result.baseUrl }, auth.secrets) };
+  const cache = scrub({ tools: result.tools as StoredTool[], baseUrl: result.baseUrl }, auth.secrets);
+  return { ok: true, cache, ...(pendingSignIn ? { needsAuth: pendingSignIn } : {}) };
 }
 
 function isStale(sourceId: string): boolean {
@@ -349,8 +378,8 @@ export async function syncSource(sourceId: string): Promise<Source> {
   updateConfig((config) => {
     const target = config.sources.find((s) => s.id === sourceId);
     if (!target) return;
-    target.status = outcome.ok ? "ready" : outcome.needsAuth ? "needs_auth" : "failed";
-    target.error = outcome.ok ? undefined : outcome.error;
+    target.status = outcome.ok ? (outcome.needsAuth ? "needs_auth" : "ready") : outcome.needsAuth ? "needs_auth" : "failed";
+    target.error = outcome.ok ? outcome.needsAuth : outcome.error;
     target.toolCount = outcome.ok ? outcome.cache.tools.length : (loadToolCache(sourceId)?.tools.length ?? 0);
     target.syncedAt = new Date().toISOString();
     if (currentNames) {
@@ -367,6 +396,9 @@ export async function syncSource(sourceId: string): Promise<Source> {
 // Add / edit / remove
 // ---------------------------------------------------------------------------
 
+export const OAUTH2_NEEDS_TYPE =
+  "Choose its type (OpenAPI, GraphQL or MCP server): with browser sign-in there's no token until after it's added, so mcpmaster can't detect it";
+
 export type AddSourceInput = {
   /** A URL, a spec file path, or a command line. */
   input: string;
@@ -375,13 +407,82 @@ export type AddSourceInput = {
   type?: SourceType;
   auth?: SourceAuth;
   token?: string;
+  /** oauth2: the client secret, stored locally (unless read from the environment). */
+  clientSecret?: string;
   env?: Record<string, string>;
   readOnly?: boolean;
   hideNewTools?: boolean;
 };
 
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+// Printable, no control characters: these end up in URLs and form bodies.
+const PRINTABLE = /^[\x21-\x7e][\x20-\x7e]*$/;
+
+/**
+ * An OAuth endpoint carries the client secret and tokens, so it must be
+ * https — plain http only to this machine itself. (Other private addresses
+ * are still up to the private-network setting, enforced by validatedFetch.)
+ */
+function validateEndpoint(value: unknown, what: string): string {
+  let url: URL;
+  try {
+    url = new URL(String(value ?? ""));
+  } catch {
+    throw new EngineError(`The ${what} isn't a valid URL`);
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || /^127\./.test(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) throw new EngineError(`The ${what} must be an https URL`);
+  if (url.username || url.password) throw new EngineError(`The ${what} can't contain credentials`);
+  url.hash = "";
+  return url.toString();
+}
+
+/**
+ * A provider's published OAuth endpoints (RFC 8414 / OpenID Connect / RFC
+ * 9728), from its issuer URL or the integration's own URL. Only fills in a
+ * form: whatever comes back is validated again on add.
+ */
+export async function discoverOAuth2Endpoints(input: string): Promise<OAuth2Discovery> {
+  applySettings();
+  try {
+    return await discoverOAuth2(input);
+  } catch (error) {
+    throw new EngineError(error instanceof OAuth2Error ? error.message : "Couldn't look up the provider's OAuth settings");
+  }
+}
+
+function validateOAuth2(auth: Extract<SourceAuth, { type: "oauth2" }>): SourceAuth {
+  if (auth.grant !== "client_credentials" && auth.grant !== "authorization_code") {
+    throw new EngineError("The OAuth2 grant is client_credentials or authorization_code");
+  }
+  const clientId = String(auth.clientId ?? "").trim();
+  if (!clientId || clientId.length > 512 || !PRINTABLE.test(clientId)) throw new EngineError("Add the OAuth2 client ID");
+  const clean: Extract<SourceAuth, { type: "oauth2" }> = {
+    type: "oauth2",
+    grant: auth.grant,
+    tokenUrl: validateEndpoint(auth.tokenUrl, "token URL"),
+    clientId,
+  };
+  if (auth.grant === "authorization_code") {
+    if (!auth.authorizeUrl) throw new EngineError("Add the provider's authorization URL");
+    clean.authorizeUrl = validateEndpoint(auth.authorizeUrl, "authorization URL");
+  }
+  const scope = String(auth.scope ?? "").trim();
+  if (scope) {
+    if (scope.length > 1024 || !PRINTABLE.test(scope)) throw new EngineError("That scope isn't valid");
+    clean.scope = scope;
+  }
+  if (auth.clientAuth === "basic") clean.clientAuth = "basic";
+  if (auth.clientSecretEnv) {
+    if (!ENV_NAME.test(auth.clientSecretEnv)) throw new EngineError("That environment variable name isn't valid");
+    clean.clientSecretEnv = auth.clientSecretEnv;
+  }
+  return clean;
+}
+
 function validateAuth(auth: SourceAuth | undefined): SourceAuth {
   if (!auth || auth.type === "none") return { type: "none" };
+  if (auth.type === "oauth2") return validateOAuth2(auth);
   if (auth.type !== "bearer" && auth.type !== "api_key") throw new EngineError("Unknown auth type");
   const clean: SourceAuth = { type: auth.type };
   if (auth.header) {
@@ -389,7 +490,7 @@ function validateAuth(auth: SourceAuth | undefined): SourceAuth {
     clean.header = auth.header;
   }
   if (auth.env) {
-    if (!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(auth.env)) throw new EngineError("That environment variable name isn't valid");
+    if (!ENV_NAME.test(auth.env)) throw new EngineError("That environment variable name isn't valid");
     clean.env = auth.env;
   }
   return clean;
@@ -419,6 +520,15 @@ export async function addSource(input: AddSourceInput): Promise<Source> {
   const target = classifyTarget(input.input);
   const auth = validateAuth(input.auth);
   const env = validateEnv(input.env);
+  if (auth.type === "oauth2" && auth.grant === "client_credentials" && !auth.clientSecretEnv && !input.clientSecret) {
+    throw new EngineError("Add the OAuth2 client secret, or read it from an environment variable");
+  }
+  if (auth.type === "oauth2" && target.kind === "command") throw new EngineError("A local command can't use OAuth2 — pass its credentials as environment variables");
+  // Browser sign-in happens after the integration is saved, so there is no
+  // token yet to probe a URL with: its type has to be given, not detected.
+  if (auth.type === "oauth2" && auth.grant === "authorization_code" && target.kind === "url" && !input.type) {
+    throw new EngineError(OAUTH2_NEEDS_TYPE);
+  }
 
   const config = loadConfig();
   let name: string;
@@ -459,16 +569,24 @@ export async function addSource(input: AddSourceInput): Promise<Source> {
 
   // Credentials are saved before translation because introspection itself is
   // commonly auth-gated; they are removed again if nothing recognises the input.
-  if (input.token || env) saveSecret(base.id, { token: input.token || undefined, env });
+  const oauth2 = auth.type === "oauth2" && input.clientSecret && !auth.clientSecretEnv ? { clientSecret: input.clientSecret } : undefined;
+  if (input.token || env || oauth2) saveSecret(base.id, { token: input.token || undefined, env, oauth2 });
+
+  // An authorization_code integration has no token until the user consents,
+  // so a remote endpoint behind it can't be probed yet. Keep it, waiting for
+  // that sign-in — but only once we know what it is.
+  const needsConsent = auth.type === "oauth2" && auth.grant === "authorization_code";
 
   let firstError: string | null = null;
+  let consentCandidate: Source | null = null;
   for (const candidate of candidates) {
     const outcome = await translate(candidate);
     if (outcome.ok) {
       saveToolCache(candidate.id, outcome.cache);
       const source: Source = {
         ...candidate,
-        status: "ready",
+        status: outcome.needsAuth ? "needs_auth" : "ready",
+        ...(outcome.needsAuth ? { error: outcome.needsAuth } : {}),
         toolCount: outcome.cache.tools.length,
         syncedAt: new Date().toISOString(),
       };
@@ -489,7 +607,17 @@ export async function addSource(input: AddSourceInput): Promise<Source> {
       });
       return source;
     }
+    if (needsConsent && outcome.needsAuth) consentCandidate ??= candidate;
     firstError ??= outcome.error;
+  }
+
+  if (consentCandidate) {
+    const source: Source = { ...consentCandidate, status: "needs_auth", error: "Sign in to finish connecting" };
+    updateConfig((c) => {
+      if (c.sources.some((s) => s.name === source.name)) source.name = uniqueName(source.name, c);
+      c.sources.push(source);
+    });
+    return source;
   }
 
   await closeStdio(base.id);
@@ -510,6 +638,8 @@ export type UpdateSourceInput = {
   auth?: SourceAuth;
   /** Replace the stored token. An empty string clears it. */
   token?: string;
+  /** oauth2: replace the stored client secret. */
+  clientSecret?: string;
   /** Replace the stdio environment. */
   env?: Record<string, string>;
 };
@@ -526,12 +656,25 @@ export async function updateSource(sourceId: string, input: UpdateSourceInput): 
   const auth = input.auth ? validateAuth(input.auth) : undefined;
   const env = input.env ? validateEnv(input.env) ?? {} : undefined;
 
-  if (input.token !== undefined || env !== undefined) {
+  if (auth?.type === "oauth2" && existing.type === "stdio") throw new EngineError("A local command can't use OAuth2 — pass its credentials as environment variables");
+
+  if (input.token !== undefined || env !== undefined || input.clientSecret !== undefined || auth !== undefined) {
     const current = loadSecret(sourceId);
-    saveSecret(sourceId, {
-      token: input.token !== undefined ? input.token || undefined : current.token,
-      env: env !== undefined ? env : current.env,
-    });
+    const next = { ...current };
+    if (input.token !== undefined) next.token = input.token || undefined;
+    if (env !== undefined) next.env = env;
+    if (auth && JSON.stringify(auth) !== JSON.stringify(existing.auth)) {
+      // A changed configuration invalidates every token issued under the old
+      // one; an OAuth2 client secret carries over unless it's replaced.
+      next.oauth = undefined;
+      next.oauth2 = auth.type === "oauth2" && !auth.clientSecretEnv && current.oauth2?.clientSecret
+        ? { clientSecret: current.oauth2.clientSecret }
+        : undefined;
+    }
+    if (input.clientSecret !== undefined) {
+      next.oauth2 = { ...next.oauth2, clientSecret: input.clientSecret || undefined };
+    }
+    saveSecret(sourceId, next);
   }
 
   updateConfig((config) => {
@@ -554,7 +697,7 @@ export async function updateSource(sourceId: string, input: UpdateSourceInput): 
     if (auth) target.auth = auth;
   });
 
-  const credentialsChanged = auth !== undefined || input.token !== undefined || env !== undefined;
+  const credentialsChanged = auth !== undefined || input.token !== undefined || env !== undefined || input.clientSecret !== undefined;
   if (credentialsChanged) return syncSource(sourceId);
   if (input.enabled === false) await closeStdio(sourceId);
   return loadConfig().sources.find((s) => s.id === sourceId)!;
@@ -588,7 +731,9 @@ export function describeCredential(source: Source): { configured: boolean; envKe
         ? true
         : source.auth.type === "oauth"
           ? Boolean(secret.oauth?.tokens?.access_token)
-          : Boolean(credentialFor(source, secret)),
+          : source.auth.type === "oauth2"
+            ? oauth2Configured(source)
+            : Boolean(credentialFor(source, secret)),
     envKeys: Object.keys(secret.env ?? {}),
   };
 }
@@ -928,6 +1073,18 @@ export async function callTool(fullName: string, args: Record<string, unknown>):
   applySettings(config);
   const tool = agentTools(config).find((t) => t.fullName === fullName);
   if (!tool) return { ok: false, error: `Unknown tool "${fullName}"` };
+  const outcome = await dispatch(tool, args);
+  // The provider rejected an OAuth2 token it issued (revoked, rotated, or it
+  // never said when it expires): drop it and try once more with a fresh one.
+  // A 401 means the request wasn't processed, so the retry can't double it.
+  if (!outcome.ok && tool.source.auth.type === "oauth2" && /HTTP 401\b/.test(outcome.error)) {
+    invalidateOAuth2AccessToken(tool.source.id);
+    return dispatch(tool, args);
+  }
+  return outcome;
+}
+
+async function dispatch(tool: AggregatedTool, args: Record<string, unknown>): Promise<ToolCallOutcome> {
   const { source, stored } = tool;
 
   if (source.type === "openapi") {
@@ -996,6 +1153,9 @@ export async function callTool(fullName: string, args: Record<string, unknown>):
 // OAuth sign-in (remote MCP servers)
 // ---------------------------------------------------------------------------
 
+/** The status message while a browser sign-in is in progress. */
+export const SIGN_IN_WAITING = "Waiting for you to finish signing in";
+
 function markNeedsAuth(sourceId: string): void {
   updateConfig((config) => {
     const target = config.sources.find((s) => s.id === sourceId);
@@ -1018,13 +1178,14 @@ export function oauthRedirectUrl(port: number): string {
 export async function startSignIn(sourceId: string, port: number): Promise<string | null> {
   const source = loadConfig().sources.find((s) => s.id === sourceId);
   if (!source) throw new EngineError("That integration doesn't exist");
-  if (source.type !== "mcp") throw new EngineError("Only remote MCP servers sign in with OAuth");
+  if (source.auth.type === "oauth2") return startOAuth2SignIn(source, port);
+  if (source.type !== "mcp") throw new EngineError("This integration doesn't use OAuth — set its credential instead");
   updateConfig((config) => {
     const target = config.sources.find((s) => s.id === sourceId);
     if (target) {
       target.auth = { type: "oauth" };
       target.status = "needs_auth";
-      target.error = "Waiting for you to finish signing in";
+      target.error = SIGN_IN_WAITING;
     }
   });
   // Any static credential it had is replaced by the OAuth one; beginOAuth
@@ -1040,8 +1201,62 @@ export async function startSignIn(sourceId: string, port: number): Promise<strin
   return null;
 }
 
+/**
+ * OAuth2 with the user's own client. client_credentials needs no browser:
+ * "signing in" re-exchanges the token. authorization_code discards the old
+ * grant and returns the provider's consent URL.
+ */
+async function startOAuth2SignIn(source: Source, port: number): Promise<string | null> {
+  forgetOAuth2Tokens(source.id);
+  if (source.auth.type !== "oauth2" || source.auth.grant === "client_credentials") {
+    const synced = await syncSource(source.id);
+    if (synced.status !== "ready") throw new EngineError(synced.error ?? "Couldn't get a token from the provider");
+    return null;
+  }
+  updateConfig((config) => {
+    const target = config.sources.find((s) => s.id === source.id);
+    if (target) {
+      target.status = "needs_auth";
+      target.error = SIGN_IN_WAITING;
+    }
+  });
+  try {
+    return beginOAuth2(source, oauthRedirectUrl(port));
+  } catch (error) {
+    throw new EngineError(error instanceof OAuth2Error ? error.message : "Couldn't start the sign-in");
+  }
+}
+
+/**
+ * The provider sent the browser back with an error (the user declined, or
+ * the client isn't allowed): burn the pending sign-in and say so, so a
+ * waiting CLI stops instead of timing out.
+ */
+export function declineSignIn(state: string): void {
+  const source = findOAuth2Pending(state);
+  if (!source) return;
+  abandonOAuth2(source);
+  updateConfig((config) => {
+    const target = config.sources.find((s) => s.id === source.id);
+    if (target) target.error = "The sign-in wasn't approved — sign in again to connect";
+  });
+}
+
 /** The browser came back from the provider: exchange the code and sync. */
 export async function finishSignIn(state: string, code: string): Promise<Source> {
+  const oauth2Source = findOAuth2Pending(state);
+  if (oauth2Source) {
+    try {
+      await completeOAuth2(oauth2Source, code);
+    } catch (error) {
+      updateConfig((config) => {
+        const target = config.sources.find((s) => s.id === oauth2Source.id);
+        if (target) target.error = "The sign-in didn't finish — sign in again to connect";
+      });
+      throw new EngineError(error instanceof OAuth2Error ? error.message : "Couldn't finish the sign-in");
+    }
+    return syncSource(oauth2Source.id);
+  }
   try {
     const source = await completeOAuth(state, code);
     return await syncSource(source.id);
@@ -1054,7 +1269,12 @@ export async function finishSignIn(state: string, code: string): Promise<Source>
 export async function signOut(sourceId: string): Promise<Source> {
   const source = loadConfig().sources.find((s) => s.id === sourceId);
   if (!source) throw new EngineError("That integration doesn't exist");
-  forgetOAuth(sourceId);
+  if (source.auth.type === "oauth2") {
+    forgetOAuth2Tokens(sourceId);
+    if (source.auth.grant === "client_credentials") return loadConfig().sources.find((s) => s.id === sourceId)!;
+  } else {
+    forgetOAuth(sourceId);
+  }
   markNeedsAuth(sourceId);
   return loadConfig().sources.find((s) => s.id === sourceId)!;
 }

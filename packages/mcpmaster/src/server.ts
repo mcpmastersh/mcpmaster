@@ -21,6 +21,7 @@ import { timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   EngineError,
+  discoverOAuth2Endpoints,
   addSource,
   aggregateTools,
   filterTools,
@@ -41,7 +42,9 @@ import {
   executeCode,
   setToolMode,
   toolMode,
+  declineSignIn,
   finishSignIn,
+  oauthRedirectUrl,
   removeSource,
   signOut,
   startSignIn,
@@ -52,7 +55,7 @@ import {
   type AggregatedTool,
 } from "./engine.ts";
 import { createMcpServer } from "./mcp.ts";
-import { adminToken, homeDir, loadConfig, updateConfig, type Source } from "./store.ts";
+import { adminToken, homeDir, loadConfig, updateConfig, type Source, type SourceAuth } from "./store.ts";
 import { webAsset } from "./web-assets.ts";
 import { VERSION } from "./version.ts";
 
@@ -225,6 +228,27 @@ function strRecord(value: unknown): Record<string, string> | undefined {
   return out;
 }
 
+/** The `auth` object of an add/edit body, as strings only; the engine validates it. */
+function authFromBody(value: unknown): SourceAuth | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "object" || Array.isArray(value)) throw new HttpError(400, "auth must be an object");
+  const auth = value as Record<string, unknown>;
+  const opt = (key: string) => str(auth[key]) || undefined;
+  if (auth.type === "oauth2") {
+    return {
+      type: "oauth2",
+      grant: opt("grant"),
+      tokenUrl: opt("tokenUrl"),
+      authorizeUrl: opt("authorizeUrl"),
+      clientId: opt("clientId"),
+      scope: opt("scope"),
+      clientAuth: opt("clientAuth"),
+      clientSecretEnv: opt("clientSecretEnv"),
+    } as never;
+  }
+  return { type: auth.type, header: opt("header"), env: opt("env") } as never;
+}
+
 async function handleApi(req: IncomingMessage, res: ServerResponse, path: string, mcpUrl: string, port: number): Promise<void> {
   const method = req.method ?? "GET";
   if (method !== "GET" && method !== "DELETE") {
@@ -246,6 +270,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
       version: VERSION,
       home: homeDir(),
       mcpUrl,
+      oauthRedirectUrl: oauthRedirectUrl(port),
       allowPrivateNetwork: config.allowPrivateNetwork,
       toolMode: toolMode(config),
       toolModeOverridden: toolMode(config) !== config.toolMode,
@@ -334,15 +359,20 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
     return sendJson(res, 200, { kind: target.kind, suggestedName: suggestName(target) });
   }
 
+  if (path === "/api/oauth2/discover" && method === "POST") {
+    const body = await readJson(req);
+    return sendJson(res, 200, await discoverOAuth2Endpoints(str(body.url) ?? ""));
+  }
+
   if (path === "/api/integrations" && method === "POST") {
     const body = await readJson(req);
-    const auth = body.auth as { type?: string; header?: string; env?: string } | undefined;
     const source = await addSource({
       input: str(body.input) ?? "",
       name: str(body.name) || undefined,
       type: (str(body.type) || undefined) as never,
-      auth: auth ? ({ type: auth.type, header: str(auth.header) || undefined, env: str(auth.env) || undefined } as never) : undefined,
+      auth: authFromBody(body.auth),
       token: str(body.token) || undefined,
+      clientSecret: str(body.clientSecret) || undefined,
       env: strRecord(body.env),
       readOnly: body.readOnly === true,
       hideNewTools: body.hideNewTools === true,
@@ -394,14 +424,14 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
     if (sync && method === "POST") return sendJson(res, 200, { integration: sourceView(await syncSource(id)) });
     if (!sync && method === "PATCH") {
       const body = await readJson(req);
-      const auth = body.auth as { type?: string; header?: string; env?: string } | undefined;
       const source = await updateSource(id, {
         enabled: typeof body.enabled === "boolean" ? body.enabled : undefined,
         readOnly: typeof body.readOnly === "boolean" ? body.readOnly : undefined,
         hideNewTools: typeof body.hideNewTools === "boolean" ? body.hideNewTools : undefined,
         name: str(body.name),
-        auth: auth ? ({ type: auth.type, header: str(auth.header) || undefined, env: str(auth.env) || undefined } as never) : undefined,
+        auth: authFromBody(body.auth),
         token: str(body.token),
+        clientSecret: str(body.clientSecret),
         env: strRecord(body.env),
       });
       return sendJson(res, 200, { integration: sourceView(source) });
@@ -438,15 +468,21 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
   await transport.handleRequest(req, res, body);
 }
 
-function callbackPage(ok: boolean, title: string, message: string): string {
+function messagePage(title: string, message: string, hint?: string): string {
   const esc = (t: string) => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>mcpmaster</title><link rel="stylesheet" href="/app.css"></head><body><main><div class="hero signin"><img src="/logo.svg" alt="" width="44" height="44"><h1>${esc(title)}</h1><p>${esc(message)}</p>${ok ? "" : '<p class="hint">Start the sign-in again from mcpmaster.</p>'}</div></main></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>mcpmaster</title><link rel="stylesheet" href="/app.css"></head><body><main><div class="hero signin"><img src="/logo.svg" alt="" width="44" height="44"><h1>${esc(title)}</h1><p>${esc(message)}</p>${hint ? `<p class="hint">${hint}</p>` : ""}</div></main></body></html>`;
+}
+
+function callbackPage(ok: boolean, title: string, message: string): string {
+  return messagePage(title, message, ok ? undefined : "Start the sign-in again from mcpmaster.");
 }
 
 async function handleOAuthCallback(url: URL, res: ServerResponse): Promise<void> {
   const state = url.searchParams.get("state") ?? "";
   const code = url.searchParams.get("code") ?? "";
   if (url.searchParams.get("error") || !state || !code) {
+    // Tell a waiting CLI/UI now rather than letting it time out.
+    if (url.searchParams.get("error") && state) declineSignIn(state);
     return send(res, 400, callbackPage(false, "Sign-in wasn't completed", "The provider didn't approve the sign-in."), "text/html; charset=utf-8");
   }
   try {
@@ -498,6 +534,13 @@ export function startServer(port = DEFAULT_PORT): Promise<StartedServer> {
             const asset = webAsset(path);
             if (asset === null) throw new HttpError(404, "Not found");
             return send(res, 200, asset, CONTENT_TYPES[path]);
+          }
+
+          // A link to an API route opened in a browser tab (not a fetch from
+          // the UI): say where to go instead of answering with a token error.
+          // Nothing is read or started, so the admin token stays required.
+          if (isApi && req.method === "GET" && req.headers["sec-fetch-mode"] === "navigate") {
+            return send(res, 404, messagePage("That's mcpmaster's API, not a page", "The web UI and the CLI call it for you — to sign in, use Sign in on the integration's page, or run mcpmaster login <name>.", '<a href="/">Open mcpmaster</a>'), "text/html; charset=utf-8");
           }
 
           if (!tokenMatches(req.headers.authorization, token)) {

@@ -10,7 +10,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseJsonRpcResponse } from "../packages/core/src/mcp-proxy.ts";
@@ -122,7 +122,7 @@ test("code mode finds the integration prefix in both runtimes' tool names", asyn
 });
 
 test("the open-source packages never point at the private repo's docs or internals", () => {
-  // packages/core and packages/mcpmaster are published on their own, so a
+  // packages/core, packages/mcpmaster and packages/mcpv are published on their own, so a
   // comment citing a design doc, a hosted source path or hosted-only
   // infrastructure is a dead reference there (and leaks internals).
   const root = fileURLToPath(new URL("../packages/", import.meta.url));
@@ -140,6 +140,7 @@ test("the open-source packages never point at the private repo's docs or interna
       }
     }
   };
-  for (const pkg of ["core", "mcpmaster"]) walk(join(root, pkg));
+  // Each public repo exports only some of these, so a missing one is skipped.
+  for (const pkg of ["core", "mcpmaster", "mcpv"]) if (existsSync(join(root, pkg))) walk(join(root, pkg));
   assert.deepEqual(offenders, [], offenders.join("\n"));
 });
