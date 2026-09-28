@@ -26,6 +26,25 @@ export type SourceAuth =
   | { type: "none" }
   /** Remote MCP server signed in through its own OAuth flow (oauth.ts). */
   | { type: "oauth" }
+  /**
+   * OAuth2 with a client you registered with the provider (oauth2.ts).
+   * Endpoints and the client id aren't secret; the client secret and tokens
+   * live in secrets.json.
+   */
+  | {
+      type: "oauth2";
+      grant: "client_credentials" | "authorization_code";
+      tokenUrl: string;
+      /** authorization_code: where the browser goes for consent. */
+      authorizeUrl?: string;
+      clientId: string;
+      /** Space-separated, as the provider expects it. */
+      scope?: string;
+      /** Send the client id/secret as HTTP Basic instead of in the form body. */
+      clientAuth?: "basic";
+      /** Read the client secret from this environment variable instead of the store. */
+      clientSecretEnv?: string;
+    }
   | {
       type: "bearer" | "api_key";
       /** Header an api_key is sent in (default X-API-Key). */
@@ -109,8 +128,26 @@ export type OAuthState = {
   pendingState?: string;
 };
 
+/**
+ * OAuth2 state for one integration with a user-supplied client (oauth2.ts).
+ * A new consent or a changed configuration discards everything but the
+ * client secret.
+ */
+export type OAuth2State = {
+  clientSecret?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  /** Epoch ms; absent when the provider didn't say. */
+  expiresAt?: number;
+  pendingState?: string;
+  pendingExpiresAt?: number;
+  codeVerifier?: string;
+  redirectUrl?: string;
+};
+
 export type SourceSecret = {
   oauth?: OAuthState;
+  oauth2?: OAuth2State;
   /** bearer / api_key value. */
   token?: string;
   /** stdio: extra environment variables for the process. */

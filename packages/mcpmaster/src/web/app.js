@@ -33,6 +33,9 @@ class ApiError extends Error {
 }
 
 async function api(method, path, body) {
+  // The server takes only JSON on anything but GET/DELETE (a cross-site form
+  // can't send it), so a body-less POST such as sign-in still sends `{}`.
+  if (body === undefined && method !== "GET" && method !== "DELETE") body = {};
   let res;
   try {
     res = await fetch(path, {
@@ -71,6 +74,15 @@ function h(tag, attrs, ...children) {
   }
   append(el, children);
   return el;
+}
+
+/**
+ * replaceChildren() for conditional content: `null`/`false` children are
+ * skipped (replaceChildren itself would render them as the text "null").
+ */
+function fill(el, ...children) {
+  el.replaceChildren();
+  return append(el, children);
 }
 
 function append(el, children) {
@@ -356,9 +368,155 @@ const EXAMPLES = [
   { label: "Memory · local MCP", input: "npx -y @modelcontextprotocol/server-memory" },
 ];
 
+// ---------------------------------------------------------------------------
+// OAuth2 with your own client — shared by the add and credential dialogs
+// ---------------------------------------------------------------------------
+
+function segmentedControl(options, current, onPick) {
+  return h("div", { class: "segmented", role: "group" }, options.map(([value, label]) =>
+    h("button", { type: "button", "aria-pressed": String(current === value), onclick: () => onPick(value) }, label)));
+}
+
+function oauth2Form(auth) {
+  const a = auth && auth.type === "oauth2" ? auth : {};
+  return {
+    grant: a.grant || "authorization_code", authorizeUrl: a.authorizeUrl || "", tokenUrl: a.tokenUrl || "",
+    clientId: a.clientId || "", scope: a.scope || "", basic: a.clientAuth === "basic",
+    useEnv: Boolean(a.clientSecretEnv), secretEnv: a.clientSecretEnv || "", secret: "",
+    issuer: "", lookup: null, autoFor: "", manual: false,
+  };
+}
+
+// Most providers publish their endpoints (RFC 8414 / OpenID Connect
+// discovery), so they're looked up rather than copied by hand: on the
+// integration's own URL automatically (`auto`), or on an issuer URL the user
+// gives when that finds nothing. The endpoint fields show only then.
+async function findOAuth2Endpoints(o, url, paint, auto = false) {
+  if (!url) {
+    o.lookup = { miss: "Enter the provider's issuer URL, like https://accounts.google.com." };
+    paint();
+    return;
+  }
+  o.lookup = { busy: true, auto };
+  paint();
+  let host = url;
+  try { host = new URL(url).host; } catch { /* show it as is */ }
+  try {
+    const found = await api("POST", "/api/oauth2/discover", { url });
+    if (auto && o.autoFor !== url) return; // the URL changed meanwhile
+    o.authorizeUrl = found.authorizeUrl || "";
+    o.tokenUrl = found.tokenUrl;
+    if (found.clientAuth === "basic") o.basic = true;
+    try { host = new URL(found.metadataUrl).host; } catch { /* keep the one asked */ }
+    o.manual = false;
+    o.lookup = { found: true, host, auto, scopes: found.scopes || [] };
+  } catch (e) {
+    if (auto && o.autoFor !== url) return;
+    o.manual = true;
+    o.lookup = {
+      auto,
+      miss: auto
+        ? `${host} doesn't publish its OAuth settings. Enter them below, or look them up from the provider's issuer URL.`
+        : e.message,
+    };
+  }
+  paint();
+}
+
+// `editing`: the integration already has these settings, so an empty secret
+// field means "keep the stored one".
+// `guess`: the integration's URL, where the provider's settings may be published.
+function oauth2Fields(o, paint, editing = false, guess = "") {
+  const browser = o.grant === "authorization_code";
+  const text = (id, label, key, placeholder) => h("div", { class: "field" }, h("label", { for: id }, label),
+    h("input", { type: "text", id, value: o[key], placeholder, autocomplete: "off", spellcheck: "false", oninput: (e) => { o[key] = e.target.value; } }));
+  const redirect = store.state && store.state.oauthRedirectUrl;
+
+  // Look the URL up once, and again when it changes — unless the user has
+  // taken over, or (editing) the endpoints are already set.
+  if (guess && o.autoFor !== guess && !(o.manual && !(o.lookup && o.lookup.auto))) {
+    // What an earlier lookup filled in is replaced; what the user typed isn't.
+    const stale = o.lookup && o.lookup.auto && o.lookup.found;
+    if (stale || (!o.tokenUrl && !o.authorizeUrl)) {
+      if (stale) { o.tokenUrl = ""; o.authorizeUrl = ""; }
+      o.autoFor = guess;
+      o.lookup = { busy: true, auto: true };
+      setTimeout(() => findOAuth2Endpoints(o, guess, paint, true), 0);
+    }
+  }
+
+  const lookup = o.lookup || {};
+  const found = lookup.found && !o.manual && (!browser || o.authorizeUrl);
+  const find = () => findOAuth2Endpoints(o, o.issuer.trim(), paint);
+  const endpoints = lookup.busy
+    ? h("div", { class: "field hint", role: "status" }, h("span", { class: "spinner", "aria-hidden": "true" }), " Looking up the provider's OAuth settings…")
+    : found
+      ? h("div", { class: "field" }, h("label", {}, "Endpoints"),
+        h("div", { class: "found-box" },
+          h("div", { class: "hint ok", role: "status" }, `Found ${lookup.host}'s published OAuth settings`),
+          h("dl", { class: "kv" },
+            browser ? [h("dt", {}, "Authorization"), h("dd", { class: "mono" }, o.authorizeUrl)] : null,
+            h("dt", {}, "Token"), h("dd", { class: "mono" }, o.tokenUrl)),
+          h("a", { href: "#", class: "hint", onclick: (e) => { e.preventDefault(); o.manual = true; o.lookup = null; paint(); } }, "Enter them by hand")))
+      : h("div", {},
+        lookup.found && browser && !o.authorizeUrl
+          ? h("div", { class: "field hint" }, `${lookup.host} publishes no sign-in page — use Client credentials, or add the authorization URL.`) : null,
+        h("div", { class: "field" }, h("label", { for: "o-issuer" }, "Provider issuer URL (optional)"),
+          h("div", { class: "input-row" },
+            h("input", { type: "text", id: "o-issuer", value: o.issuer, placeholder: "https://accounts.google.com", autocomplete: "off", spellcheck: "false",
+              oninput: (e) => { o.issuer = e.target.value; },
+              onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); find(); } } }),
+            h("button", { type: "button", class: "btn btn-sm", onclick: find }, "Find endpoints")),
+          lookup.miss ? h("div", { class: lookup.auto ? "hint" : "field-error", role: lookup.auto ? "status" : "alert" }, lookup.miss)
+            : h("div", { class: "hint" }, "mcpmaster reads the endpoints a provider publishes. Or fill them in below.")),
+        browser ? text("o-authorize", "Authorization URL", "authorizeUrl", "https://provider.example.com/oauth/authorize") : null,
+        text("o-token", "Token URL", "tokenUrl", "https://provider.example.com/oauth/token"));
+  return h("div", {},
+    h("div", { class: "field" }, h("label", {}, "Grant"),
+      segmentedControl([["authorization_code", "Browser sign-in"], ["client_credentials", "Client credentials"]], o.grant, (v) => { o.grant = v; paint(); }),
+      h("div", { class: "hint" }, browser
+        ? "You approve access once on the provider's consent screen (authorization code with PKCE). Tokens refresh on their own."
+        : "Machine-to-machine: mcpmaster trades the client ID and secret for a token. No sign-in.")),
+    endpoints,
+    text("o-client", "Client ID", "clientId", ""),
+    h("div", { class: "field" },
+      h("label", { for: "o-secret" }, o.useEnv ? "Client secret: environment variable" : browser ? "Client secret (leave empty for a public client)" : "Client secret"),
+      o.useEnv
+        ? h("input", { type: "text", id: "o-secret", value: o.secretEnv, placeholder: "CLIENT_SECRET", spellcheck: "false", oninput: (e) => { o.secretEnv = e.target.value; } })
+        : h("input", { type: "password", id: "o-secret", value: o.secret, autocomplete: "off", placeholder: editing ? "Unchanged" : "", oninput: (e) => { o.secret = e.target.value; } }),
+      h("div", { class: "hint" },
+        o.useEnv ? "Read from the environment mcpmaster runs in. " : "Stored in ~/.mcpmaster with owner-only permissions and never shown again. ",
+        h("a", { href: "#", onclick: (e) => { e.preventDefault(); o.useEnv = !o.useEnv; paint(); } }, o.useEnv ? "Store a value instead" : "Use an environment variable instead"))),
+    text("o-scope", "Scopes (optional)", "scope", "read write"),
+    lookup.scopes && lookup.scopes.length ? h("div", { class: "hint scopes" }, "Offered: ",
+      lookup.scopes.slice(0, 16).join(" "), lookup.scopes.length > 16 ? ` … ${lookup.scopes.length - 16} more` : "") : null,
+    h("div", { class: "field checks" },
+      h("label", { class: "check" }, h("input", { type: "checkbox", checked: o.basic, onchange: (e) => { o.basic = e.target.checked; } }),
+        " Send the client ID and secret as HTTP Basic (some providers require it)")),
+    browser && redirect ? h("div", { class: "field" }, h("label", {}, "Redirect URI"), codeBlock(redirect),
+      h("div", { class: "hint" }, "Register this exact URI on your OAuth app. It points at this machine, so the sign-in code never leaves it.")) : null);
+}
+
+/** `{ auth, clientSecret }` for the API, or `{ error }` to show. */
+function oauth2Payload(o, editing = false) {
+  const browser = o.grant === "authorization_code";
+  if (o.lookup && o.lookup.busy) return { error: "Still looking up the provider's OAuth settings — one moment." };
+  if (browser && !o.authorizeUrl.trim()) return { error: "Add the provider's authorization URL." };
+  if (!o.tokenUrl.trim()) return { error: "Add the provider's token URL." };
+  if (!o.clientId.trim()) return { error: "Add the client ID." };
+  if (o.useEnv && !o.secretEnv.trim()) return { error: "Name the environment variable." };
+  if (!browser && !o.useEnv && !o.secret && !editing) return { error: "Client credentials need the client secret." };
+  const auth = {
+    type: "oauth2", grant: o.grant, tokenUrl: o.tokenUrl.trim(), clientId: o.clientId.trim(),
+    authorizeUrl: browser ? o.authorizeUrl.trim() : undefined, scope: o.scope.trim() || undefined,
+    clientAuth: o.basic ? "basic" : undefined, clientSecretEnv: o.useEnv ? o.secretEnv.trim() : undefined,
+  };
+  return { auth, clientSecret: !o.useEnv && o.secret ? o.secret : undefined };
+}
+
 function addDialog(initialInput = "") {
   openDialog((close) => {
-    const form = { input: initialInput, name: "", type: "", authType: "none", token: "", useEnv: false, envName: "", header: "", env: [], readOnly: false, hideNewTools: false };
+    const form = { input: initialInput, name: "", type: "", authType: "none", token: "", useEnv: false, envName: "", header: "", env: [], readOnly: false, hideNewTools: false, oauth2: oauth2Form() };
     let detected = null;
     let busy = false;
 
@@ -371,6 +529,7 @@ function addDialog(initialInput = "") {
       h("option", { value: "openapi" }, "OpenAPI"),
       h("option", { value: "graphql" }, "GraphQL"),
       h("option", { value: "mcp" }, "MCP server (remote)"));
+    const typeHint = h("div", { class: "hint" });
     const errorEl = h("div", { class: "field-error", role: "alert" });
     const authArea = h("div");
     const envArea = h("div");
@@ -411,13 +570,24 @@ function addDialog(initialInput = "") {
     function paint() {
       const isCommand = detected && detected.kind === "command";
       typeEl.parentElement.hidden = !detected || detected.kind !== "url";
+      // Browser sign-in comes after adding, so there's no token to probe the
+      // URL with yet: its type must be chosen rather than detected.
+      const mustChooseType = form.authType === "oauth2" && form.oauth2.grant === "authorization_code";
+      const detectOption = typeEl.options[0];
+      detectOption.textContent = mustChooseType ? "Choose a type" : "Detect automatically";
+      detectOption.disabled = mustChooseType;
+      typeHint.textContent = mustChooseType ? "Required with browser sign-in: mcpmaster can't look at the URL until you've signed in." : "";
+      if (detected && detected.kind === "url") {
+        detectedEl.replaceChildren(h("span", { class: "badge type" }, "url"), mustChooseType ? "A URL — choose whether it's OpenAPI, GraphQL or an MCP server." : kindText.url);
+      }
       authArea.hidden = isCommand;
       envArea.hidden = !isCommand;
 
-      authArea.replaceChildren(
+      fill(authArea,
         h("div", { class: "field" }, h("label", {}, "Authentication"),
-          segmented([["none", "None"], ["bearer", "Bearer token"], ["api_key", "API key"]], form.authType, (v) => { form.authType = v; paint(); })),
-        form.authType === "none" ? null : h("div", {},
+          segmented([["none", "None"], ["bearer", "Bearer token"], ["api_key", "API key"], ["oauth2", "OAuth2"]], form.authType, (v) => { form.authType = v; paint(); })),
+        form.authType === "oauth2" ? oauth2Fields(form.oauth2, paint, false, detected && detected.kind === "url" ? form.input : "") : null,
+        form.authType === "none" || form.authType === "oauth2" ? null : h("div", {},
           form.authType === "api_key" ? h("div", { class: "field" }, h("label", { for: "add-header" }, "Header"),
             h("input", { type: "text", id: "add-header", value: form.header, placeholder: "X-API-Key", oninput: (e) => { form.header = e.target.value; } })) : null,
           h("div", { class: "field" },
@@ -429,7 +599,7 @@ function addDialog(initialInput = "") {
               form.useEnv ? "Read from the environment mcpmaster runs in, every call. " : "Stored in ~/.mcpmaster with owner-only permissions and never shown again. ",
               h("a", { href: "#", onclick: (e) => { e.preventDefault(); form.useEnv = !form.useEnv; paint(); } }, form.useEnv ? "Store a value instead" : "Use an environment variable instead")))));
 
-      envArea.replaceChildren(
+      fill(envArea,
         h("label", {}, "Environment variables ", h("span", { class: "hint" }, "(optional — e.g. an API key the server needs)")),
         form.env.map((pair, i) => h("div", { class: "env-row" },
           h("input", { type: "text", value: pair.key, placeholder: "NAME", "aria-label": "Variable name", spellcheck: "false", oninput: (e) => { pair.key = e.target.value; } }),
@@ -446,10 +616,20 @@ function addDialog(initialInput = "") {
       const body = { input: form.input, readOnly: form.readOnly, hideNewTools: form.hideNewTools };
       if (nameEl.value.trim()) body.name = nameEl.value.trim();
       if (typeEl.value && detected && detected.kind === "url") body.type = typeEl.value;
+      if (detected && detected.kind === "url" && !typeEl.value && form.authType === "oauth2" && form.oauth2.grant === "authorization_code") {
+        errorEl.textContent = "Choose its type — OpenAPI, GraphQL or MCP server.";
+        typeEl.focus();
+        return;
+      }
       if (detected && detected.kind === "command") {
         const env = {};
         for (const { key, value } of form.env) if (key.trim()) env[key.trim()] = value;
         if (Object.keys(env).length) body.env = env;
+      } else if (form.authType === "oauth2") {
+        const payload = oauth2Payload(form.oauth2);
+        if (payload.error) { errorEl.textContent = payload.error; return; }
+        body.auth = payload.auth;
+        if (payload.clientSecret) body.clientSecret = payload.clientSecret;
       } else if (form.authType !== "none") {
         body.auth = { type: form.authType, header: form.header.trim() || undefined, env: form.useEnv ? form.envName.trim() : undefined };
         if (!form.useEnv) {
@@ -463,7 +643,7 @@ function addDialog(initialInput = "") {
       try {
         const { integration } = await api("POST", "/api/integrations", body);
         close();
-        toast(integration.status === "needs_auth" ? `${integration.name} uses OAuth — sign in to finish connecting` : `Connected ${integration.name} · ${integration.toolCount} tools`);
+        toast(integration.status === "needs_auth" ? `${integration.name} uses OAuth: sign in to finish connecting` : `Connected ${integration.name} · ${integration.toolCount} tools`);
         // go() renders through hashchange; render directly when already there.
         if (location.hash === `#/integrations/${integration.id}`) render({ soft: true });
         else go(`/integrations/${integration.id}`);
@@ -480,7 +660,7 @@ function addDialog(initialInput = "") {
       h("p", { class: "desc" }, "Paste an OpenAPI spec URL or file, a GraphQL endpoint, an MCP server URL, or a command that starts a local MCP server."),
       h("div", { class: "field" }, h("label", { for: "add-input" }, "What should agents connect to?"), inputEl, detectedEl),
       h("div", { class: "field" }, h("label", { for: "add-name" }, "Name"), nameEl, h("div", { class: "hint" }, "Also the prefix on its tools, e.g. github_list_repos.")),
-      h("div", { class: "field", hidden: true }, h("label", { for: "add-type" }, "Type"), typeEl),
+      h("div", { class: "field", hidden: true }, h("label", { for: "add-type" }, "Type"), typeEl, typeHint),
       authArea,
       envArea,
       h("div", { class: "field checks" },
@@ -617,7 +797,7 @@ function integrationPage(page, params, id) {
         watchUntilSettled(id);
       } else {
         if (popup) popup.close();
-        toast("Signed in");
+        toast(source.auth.type === "oauth2" ? "Got a new token" : "Signed in");
       }
       await render({ soft: true });
     } catch (e) {
@@ -629,12 +809,39 @@ function integrationPage(page, params, id) {
   };
 
   const signOutAction = async () => {
-    const ok = await confirmDialog({ title: `Sign out of ${source.name}?`, description: "Its tokens and client registration are deleted from this machine. Agents lose its tools until you sign in again.", confirmLabel: "Sign out", danger: true });
+    const description = source.auth.type === "oauth2"
+      ? "Its tokens are deleted from this machine. Agents can't call its tools until you sign in again."
+      : "Its tokens and client registration are deleted from this machine. Agents lose its tools until you sign in again.";
+    const ok = await confirmDialog({ title: `Sign out of ${source.name}?`, description, confirmLabel: "Sign out", danger: true });
     if (!ok) return;
     act("sign-out", () => api("POST", `/api/integrations/${id}/sign-out`));
   };
 
   const credentialCard = () => {
+    if (source.auth.type === "oauth2") {
+      const auth = source.auth;
+      const browser = auth.grant === "authorization_code";
+      const ok = source.credential.configured;
+      let host = auth.tokenUrl;
+      try { host = new URL(auth.authorizeUrl || auth.tokenUrl).host; } catch { /* show it as is */ }
+      return h("div", { class: "card" }, h("h2", {}, "OAuth2"),
+        h("p", { class: "sub" }, browser
+          ? ok ? `Signed in through ${host}. Tokens refresh automatically and are stored only on this machine.`
+            : `Sign in through ${host} to let mcpmaster call it for your agents.`
+          : `Client credentials${auth.clientSecretEnv ? `, secret read from $${auth.clientSecretEnv}` : ""}. mcpmaster fetches and renews tokens itself.`),
+        h("dl", { class: "kv" },
+          h("dt", {}, "Client ID"), h("dd", { class: "mono" }, auth.clientId),
+          h("dt", {}, "Token URL"), h("dd", { class: "mono" }, auth.tokenUrl),
+          auth.scope ? [h("dt", {}, "Scopes"), h("dd", { class: "mono" }, auth.scope)] : null,
+          browser ? null : [h("dt", {}, "Client secret"), h("dd", {}, ok
+            ? h("span", { class: "badge ok" }, h("span", { class: "dot" }), "Set")
+            : h("span", { class: "badge fail" }, h("span", { class: "dot" }), auth.clientSecretEnv ? `$${auth.clientSecretEnv} isn't set` : "Missing"))]),
+        h("div", { class: "toolbar" },
+          h("button", { class: `btn btn-sm ${browser && !ok ? "btn-primary" : ""}`, onclick: (e) => signIn(e.currentTarget) },
+            browser ? (ok ? "Sign in again" : "Sign in") : "Get a new token"),
+          browser && ok ? h("button", { class: "btn btn-sm btn-ghost", onclick: signOutAction }, "Sign out") : null,
+          h("button", { class: "btn btn-sm btn-ghost", onclick: () => credentialDialog(source) }, "Edit settings")));
+    }
     if (source.auth.type === "oauth") {
       const signedIn = source.credential.configured;
       return h("div", { class: "card" }, h("h2", {}, "Sign-in"),
@@ -845,16 +1052,17 @@ function watchUntilSettled(id) {
 
 function credentialDialog(source) {
   openDialog((close) => {
-    const form = { type: source.auth.type === "none" ? "bearer" : source.auth.type, header: source.auth.header || "", useEnv: Boolean(source.auth.env), env: source.auth.env || "", token: "" };
+    const form = { type: source.auth.type === "none" ? "bearer" : source.auth.type, header: source.auth.header || "", useEnv: Boolean(source.auth.env), env: source.auth.env || "", token: "", oauth2: oauth2Form(source.auth) };
+    const hadOAuth2 = source.auth.type === "oauth2";
     const errorEl = h("div", { class: "field-error", role: "alert" });
     const body = h("div");
-    const paint = () => body.replaceChildren(
+    const paint = () => fill(body,
       h("div", { class: "field" }, h("label", {}, "Send it as"),
-        h("div", { class: "segmented" }, [["none", "None"], ["bearer", "Bearer token"], ["api_key", "API key"]].map(([v, l]) =>
-          h("button", { type: "button", "aria-pressed": String(form.type === v), onclick: () => { form.type = v; paint(); } }, l)))),
+        segmentedControl([["none", "None"], ["bearer", "Bearer token"], ["api_key", "API key"], ["oauth2", "OAuth2"]], form.type, (v) => { form.type = v; paint(); })),
+      form.type === "oauth2" ? oauth2Fields(form.oauth2, paint, hadOAuth2, source.url || "") : null,
       form.type === "api_key" ? h("div", { class: "field" }, h("label", { for: "c-header" }, "Header"),
         h("input", { type: "text", id: "c-header", value: form.header, placeholder: "X-API-Key", oninput: (e) => { form.header = e.target.value; } })) : null,
-      form.type === "none" ? null : h("div", { class: "field" },
+      form.type === "none" || form.type === "oauth2" ? null : h("div", { class: "field" },
         h("label", { for: "c-secret" }, form.useEnv ? "Environment variable" : "New value"),
         form.useEnv
           ? h("input", { type: "text", id: "c-secret", value: form.env, placeholder: "API_TOKEN", oninput: (e) => { form.env = e.target.value; } })
@@ -865,8 +1073,12 @@ function credentialDialog(source) {
     return h("form", { novalidate: true, onsubmit: async (e) => {
       e.preventDefault();
       errorEl.textContent = "";
-      const payload = { auth: { type: form.type, header: form.header.trim() || undefined, env: form.useEnv ? form.env.trim() : undefined } };
-      if (form.type !== "none" && !form.useEnv) {
+      let payload = { auth: { type: form.type, header: form.header.trim() || undefined, env: form.useEnv ? form.env.trim() : undefined } };
+      if (form.type === "oauth2") {
+        const oauth2 = oauth2Payload(form.oauth2, hadOAuth2);
+        if (oauth2.error) { errorEl.textContent = oauth2.error; return; }
+        payload = { auth: oauth2.auth, ...(oauth2.clientSecret ? { clientSecret: oauth2.clientSecret } : {}) };
+      } else if (form.type !== "none" && !form.useEnv) {
         if (!form.token) { errorEl.textContent = "Enter the new value."; return; }
         payload.token = form.token;
       }
@@ -875,7 +1087,7 @@ function credentialDialog(source) {
       try {
         const { integration } = await api("PATCH", `/api/integrations/${source.id}`, payload);
         close();
-        toast(integration.status === "ready" ? "Credential saved" : integration.error, integration.status === "ready" ? "ok" : "fail");
+        toast(integration.status === "ready" ? "Credential saved" : integration.error, integration.status === "ready" ? "ok" : integration.status === "needs_auth" ? "warn" : "fail");
         await render({ soft: true });
       } catch (err) { errorEl.textContent = err.message; save.disabled = false; }
     } },

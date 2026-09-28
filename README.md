@@ -68,6 +68,44 @@ printf %s "$KEY" | mcpmaster add https://api.example.com/spec.json --api-key=X-A
 mcpmaster add --env API_KEY=… -- npx -y some-mcp-server
 ```
 
+### OAuth2 with your own client
+
+For an API that wants OAuth2 with an app you registered on the provider
+(GitHub, Google, Atlassian, Salesforce, your own IdP…), give mcpmaster the
+client. mcpmaster finds the provider's endpoints from what it publishes: RFC 8414
+authorization server metadata, OpenID Connect discovery, or an RFC 9728
+protected resource naming its authorization server. It looks at the
+integration's URL first, or at `--issuer` if you pass one. Only a provider that
+publishes nothing needs `--token-url` (and `--authorize-url`) by hand.
+
+When the provider has a sign-in page it's a browser sign-in (authorization code
+with PKCE), and your browser opens to its consent screen. `--grant
+client_credentials` (or a bare `--token-url`) is machine-to-machine, with no
+sign-in. A browser sign-in needs `--type`, because there's no token to look at
+the URL with until after it's added.
+
+```sh
+# Browser sign-in, endpoints discovered from the issuer. Register
+# http://127.0.0.1:7437/oauth/callback as the redirect URI on your OAuth app
+# (mcpmaster prints it too).
+mcpmaster add https://api.example.com/openapi.json --type openapi --oauth2 \
+  --issuer https://auth.example.com \
+  --client-id "$CLIENT_ID" --client-secret-env CLIENT_SECRET --scope "read write"
+
+# Client credentials (machine-to-machine), endpoints given by hand
+mcpmaster add https://api.example.com/graphql --type graphql --oauth2 \
+  --token-url https://auth.example.com/oauth/token \
+  --client-id "$CLIENT_ID" --client-secret-env CLIENT_SECRET
+```
+
+Tokens are refreshed on their own. If the provider revokes one, mcpmaster
+gets a new one and retries the call once. When the grant itself is gone,
+`mcpmaster login <name>` runs the consent again. A public client (PKCE with
+no secret) works too: leave out the secret. `--client-auth basic` sends the
+client as HTTP Basic for providers that require it. The web UI has the same
+settings under **Authentication → OAuth2**. It looks up the endpoints as soon as
+you pick OAuth2, and shows the fields only when the provider publishes nothing.
+
 mcpmaster works out what you pasted. Pass `--type openapi|graphql|mcp|stdio`
 to skip detection. Each integration gets a short name (`--name` to choose it).
 That name becomes its tool prefix, so agents see `github_list_repos`,
@@ -143,7 +181,7 @@ mcpmaster list               # integrations and their status
 mcpmaster sync [name]        # re-read tools after an API changes
 mcpmaster disable <name>     # hide an integration from agents without deleting it
 mcpmaster tools block <tool | rule>                # see "Control what agents can reach"
-mcpmaster login <name>       # sign in to an OAuth MCP server again (always from scratch)
+mcpmaster login <name>       # sign in again: an OAuth MCP server (always from scratch) or an --oauth2 integration
 mcpmaster remove <name>      # delete it, its tools and its credential
 ```
 
@@ -183,6 +221,14 @@ page in your browser may be hostile:
   a new client, and removing or signing out of an integration deletes all of
   it. If the provider rejects the client or revokes the token, that state is
   dropped as well.
+- **OAuth2 consent stays on this machine.** The provider redirects back to
+  `127.0.0.1`, and the callback is accepted only with the single-use `state`
+  mcpmaster issued for that sign-in in the last 10 minutes. PKCE is always
+  used. Token and authorization URLs must be https (plain http only to
+  localhost), token requests go through the same egress path as everything
+  else, and a provider's error body is never passed on. The client secret,
+  access and refresh tokens live in `secrets.json`. They're never shown, and
+  they're removed from any response that echoes them.
 
 ## mcpmaster Cloud
 
