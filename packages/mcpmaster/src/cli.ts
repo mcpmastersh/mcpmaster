@@ -252,6 +252,39 @@ async function cmdStop(): Promise<void> {
   say(row("ok", "Stopped", `port ${recorded.port}`));
 }
 
+const INSTALLER_URL = "https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/install.sh";
+
+async function cmdUpdate(p: Parsed): Promise<void> {
+  let latest = "";
+  try {
+    const res = await fetch("https://registry.npmjs.org/mcpmaster/latest", {
+      headers: { "cache-control": "no-cache" },
+      signal: AbortSignal.timeout(8000),
+    });
+    latest = ((await res.json()) as { version?: string }).version ?? "";
+  } catch {
+    // Offline or blocked: the installer reports its own error.
+  }
+  if (has(p, "check")) {
+    if (!latest) throw new CliError("Couldn't reach the npm registry", ["mcpmaster update"]);
+    say(row(latest === VERSION ? "ok" : "info", latest === VERSION ? `Up to date  v${VERSION}` : `v${latest} is available`, latest === VERSION ? undefined : `you have v${VERSION}`));
+    if (latest !== VERSION) say(action("mcpmaster update"));
+    return;
+  }
+  if (latest && latest === VERSION) {
+    say(row("ok", `Already the newest version  v${VERSION}`));
+    return;
+  }
+  say(row("info", latest ? `Updating v${VERSION} -> v${latest}` : "Updating to the newest version"));
+  // The installer reads the registry directly, so a stale npm cache can't hold it back.
+  const code: number = await new Promise((resolve) => {
+    const child = spawn("sh", ["-c", `curl -fsSL ${INSTALLER_URL} | sh`], { stdio: "inherit" });
+    child.on("error", () => resolve(1));
+    child.on("close", (c) => resolve(c ?? 1));
+  });
+  if (code !== 0) throw new CliError("The update didn't finish", [`curl -fsSL ${INSTALLER_URL} | sh`]);
+}
+
 async function cmdStatus(p: Parsed): Promise<void> {
   const recorded = recordedServer();
   const running = recorded ? await health(recorded.port) : false;
@@ -918,6 +951,7 @@ function help(): void {
   cmd("remove <name>", "Delete an integration and its credential");
   cmd("settings", "Tool mode (execute | all), private network access");
   cmd("start | stop | status", "Run in the foreground, stop, inspect");
+  cmd("update [--check]", "Install the newest version (bypasses the npm cache)");
   cmd("token [--rotate]", "Print the local admin token");
   say();
   say(`  ${bold("ADD FLAGS")}`);
@@ -952,6 +986,8 @@ const COMMANDS: Record<string, (p: Parsed) => Promise<void>> = {
   web: cmdUp,
   start: cmdStart,
   stop: cmdStop,
+  update: cmdUpdate,
+  upgrade: cmdUpdate,
   status: cmdStatus,
   mcp: cmdMcp,
   add: cmdAdd,

@@ -5,7 +5,9 @@
 #
 # Downloads the single-file mcpmaster build from the npm registry (no npm
 # install, no dependencies to resolve), puts a `mcpmaster` command on your
-# PATH, and starts it in the background with the web UI.
+# PATH, and starts it in the background with the web UI. Running it again
+# upgrades: it always fetches the newest published version (no npm cache in
+# the way), restarts the background server, and keeps your integrations.
 #
 # Environment:
 #   MCPMASTER_VERSION     version to install (default: latest)
@@ -13,6 +15,7 @@
 #   MCPMASTER_HOME        state directory (default: ~/.mcpmaster)
 #   MCPMASTER_NO_START=1  install only, don't start the background server
 #   MCPMASTER_CONNECT=1   also register mcpmaster with Claude Code / Codex if installed
+#   MCPMASTER_SKILL=1     also save the agent skill to ~/.claude/skills/mcpmaster (Claude Code)
 
 set -eu
 
@@ -29,6 +32,10 @@ VERSION="${MCPMASTER_VERSION:-latest}"
 HOME_DIR="${MCPMASTER_HOME:-$HOME/.mcpmaster}"
 BIN_DIR="${MCPMASTER_INSTALL_DIR:-$HOME/.local/bin}"
 REGISTRY="${MCPMASTER_REGISTRY:-https://registry.npmjs.org}"
+
+PREVIOUS=""
+PREVIOUS_BIN="$BIN_DIR/mcpmaster"
+if [ -x "$BIN_DIR/mcpmaster" ]; then PREVIOUS=$("$BIN_DIR/mcpmaster" --version 2>/dev/null || true); fi
 
 say "Installing mcpmaster ($VERSION)…"
 
@@ -47,19 +54,48 @@ umask 022
 mkdir -p "$BIN_DIR"
 cp "$TMP/package/dist/mcpmaster.mjs" "$HOME_DIR/bin/mcpmaster.mjs"
 
+# Replace the file, never write through it: an earlier `npm i -g` may have left
+# a symlink here that points into npm's own package directory.
+rm -f "$BIN_DIR/mcpmaster"
 cat > "$BIN_DIR/mcpmaster" <<WRAPPER
 #!/bin/sh
 exec node "$HOME_DIR/bin/mcpmaster.mjs" "\$@"
 WRAPPER
 chmod +x "$BIN_DIR/mcpmaster"
 
-say "+ Installed $("$BIN_DIR/mcpmaster" --version) to $BIN_DIR/mcpmaster"
+CURRENT=$("$BIN_DIR/mcpmaster" --version)
+if [ -z "$PREVIOUS" ]; then
+  say "+ Installed mcpmaster $CURRENT to $BIN_DIR/mcpmaster"
+elif [ "$PREVIOUS" = "$CURRENT" ]; then
+  say "+ mcpmaster $CURRENT is already the newest version"
+else
+  say "+ Upgraded mcpmaster $PREVIOUS -> $CURRENT (your integrations are kept)"
+  # A server started by the old version keeps running the old code.
+  "$PREVIOUS_BIN" stop >/dev/null 2>&1 || true
+fi
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) say "! $BIN_DIR isn't on your PATH — add this to your shell profile:"
      say "    export PATH=\"$BIN_DIR:\$PATH\"" ;;
 esac
+
+# Another mcpmaster earlier on the PATH (npm -g, pnpm, Homebrew) would keep answering.
+FIRST=$(command -v mcpmaster 2>/dev/null || true)
+if [ -n "$FIRST" ] && [ "$FIRST" != "$BIN_DIR/mcpmaster" ]; then
+  say "! A different mcpmaster answers first: $FIRST"
+  say "  Remove it, or run the one just installed: $BIN_DIR/mcpmaster"
+fi
+
+if [ "${MCPMASTER_SKILL:-0}" = "1" ]; then
+  if [ -f "$TMP/package/skills/mcpmaster/SKILL.md" ]; then
+    mkdir -p "$HOME/.claude/skills/mcpmaster"
+    cp "$TMP/package/skills/mcpmaster/SKILL.md" "$HOME/.claude/skills/mcpmaster/SKILL.md"
+    say "+ Saved the agent skill to ~/.claude/skills/mcpmaster/SKILL.md"
+  else
+    say "! This version doesn't ship an agent skill."
+  fi
+fi
 
 if [ "${MCPMASTER_CONNECT:-0}" = "1" ]; then
   if command -v claude >/dev/null 2>&1; then
