@@ -96,6 +96,8 @@ code, pre, .mono { font-family: var(--mono); font-size: 13px; }
 .nav-item:hover { background: var(--surface); color: var(--foreground); text-decoration: none; }
 .nav-item[aria-current="page"] { background: var(--accent-soft); color: var(--foreground); }
 .nav-item[aria-current="page"] svg { color: var(--accent); }
+.nav-item .nav-warn { margin-left: auto; min-width: 18px; padding: 0 6px; border-radius: 9px; background: var(--danger-soft); color: var(--danger); font-size: 11.5px; font-weight: 600; text-align: center; line-height: 18px; }
+.nav-item .count.after-warn { margin-left: 0; }
 .nav-item .count { margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .nav-item svg { width: 17px; height: 17px; flex: none; }
 
@@ -397,7 +399,8 @@ input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px;
 .expect span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); font-weight: 600; }
 .cheat { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; }
 .cheat-card { padding: 14px 20px; margin-top: 16px; }
-.cheat summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.cheat summary { cursor: pointer; font-weight: 600; font-size: 14px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.cheat summary .note { font-weight: 400; color: var(--muted); font-size: 13px; }
 .cheats { display: grid; grid-template-columns: minmax(0, max-content) 1fr; gap: 6px 16px; margin: 12px 0 0; align-items: center; }
 .cheats dd { margin: 0; color: var(--muted); font-size: 13.5px; }
 .cheat-cmd { background: var(--surface-raised, var(--background)); color: inherit; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; cursor: pointer; text-align: left; }
