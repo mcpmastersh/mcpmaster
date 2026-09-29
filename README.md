@@ -33,6 +33,36 @@ install entirely with `npx mcpmaster up`.
 
 ## Connect your agent
 
+**Easiest: let your agent do it.** Paste this into Claude Code, Codex, Cursor or
+any coding agent:
+
+```text
+Set up mcpmaster so every tool I use is behind one MCP endpoint.
+
+1. Install it (needs Node 20+; no sudo):
+   curl -fsSL https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/install.sh | MCPMASTER_SKILL=1 sh
+2. Run `mcpmaster status`, then `mcpmaster connect` and apply the snippet for my client
+   (for Claude Code: `mcpmaster connect claude-code | sh`).
+3. Read the skill it saved (~/.claude/skills/mcpmaster/SKILL.md) or run `mcpmaster help`.
+4. Ask me which API, GraphQL endpoint or MCP server to add first, then `mcpmaster add <url> --name <slug>`
+   and show me `mcpmaster list`.
+
+Rules:
+- Pass credentials by variable name (--token-env) or stdin (--token-stdin). Never as an argument, never ask me to paste one here.
+- The endpoint advertises one `execute` tool on purpose. Do not try to list every tool instead.
+- Do not turn on private-network access without asking me and saying why.
+- Do not guess flags. Run `mcpmaster --help` and use what it lists.
+- If a step fails, quote what it printed and give me the next thing to try.
+```
+
+**Agent skill.** [`skills/mcpmaster/SKILL.md`](skills/mcpmaster/SKILL.md) is the
+standing guide an agent keeps: the one-endpoint model, code mode, credentials
+and the commands. Claude Code loads it on demand from
+`~/.claude/skills/mcpmaster/`. Save it with `MCPMASTER_SKILL=1` on the
+installer, or copy the file. For other agents, append it to your `AGENTS.md`.
+
+Or connect by hand:
+
 | Agent | One line |
 | --- | --- |
 | Claude Code | `claude mcp add mcpmaster -- npx -y mcpmaster@latest mcp` |
@@ -43,6 +73,72 @@ install entirely with `npx mcpmaster up`.
 
 `mcpmaster connect` prints all of these. `mcpmaster connect claude-code | sh`
 runs the Claude Code one.
+
+## Upgrade
+
+Run the installer again. It fetches the newest version straight from the npm
+registry (so a stale npm cache can't hold you back), restarts the background
+server and keeps your integrations and credentials.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/install.sh | sh
+mcpmaster --version
+```
+
+Already installed? The command does the same thing:
+
+```sh
+mcpmaster update           # install the newest version
+mcpmaster update --check   # only say whether one is available
+```
+
+Installed with npm? Use `npm i -g mcpmaster@latest --prefer-online`, then
+`mcpmaster stop && mcpmaster up`: a server started by the old version keeps
+running the old code. `npm update -g` takes package names only
+(`npm update -g mcpmaster`); to pick a version use `npm i -g mcpmaster@0.3.1`.
+
+## Troubleshooting
+
+### `npm i -g mcpmaster` fails with `EEXIST: file already exists`
+
+```
+npm error code EEXIST
+npm error path /Users/you/.local/bin/mcpmaster
+npm error File exists: /Users/you/.local/bin/mcpmaster
+```
+
+The one-line installer already put a `mcpmaster` command at that path, and npm
+refuses to overwrite a file it didn't create. You don't need npm: run
+`mcpmaster update`, or the installer again. To move to the npm copy instead,
+remove the installer's file first:
+
+```sh
+rm ~/.local/bin/mcpmaster
+npm i -g mcpmaster@latest --prefer-online
+```
+
+`--force` also works, but overwrites the file without asking. Your integrations
+and credentials live in `~/.mcpmaster` and are not touched either way.
+
+### `npm update -g mcpmaster` says "up to date" but the version is old
+
+npm answers from cached registry data, or updated a different copy than the
+one that runs. Check, then bypass the cache:
+
+```sh
+mcpmaster --version                # what actually runs
+which -a mcpmaster                 # every copy on your PATH, in order
+npm i -g mcpmaster@latest --prefer-online
+mcpmaster update                   # or skip npm entirely
+```
+
+Still stale? `npm cache clean --force`. `npx mcpmaster …` keeps a separate
+cache: use `npx --yes mcpmaster@latest --version`, or `rm -rf ~/.npm/_npx`.
+
+### The version changed but the web UI looks the same
+
+The background server keeps running the code it started with. Restart it:
+`mcpmaster stop && mcpmaster up`.
 
 ## Add integrations
 

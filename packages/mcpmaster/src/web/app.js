@@ -694,6 +694,66 @@ function pasteBox() {
       EXAMPLES.map((ex) => h("button", { class: "chip", type: "button", onclick: () => addDialog(ex.input, ex.type) }, ex.label))));
 }
 
+// ---------------------------------------------------------------------------
+// First-run guide
+//
+// Someone who lands here for the first time is asked to "connect anything" and
+// has no idea what that leads to. The guide is the whole loop in four numbered
+// steps (running, add something, connect an agent, ask it) with a sample that
+// needs no account or key, and it says what should appear after each step so
+// they can tell it worked.
+// ---------------------------------------------------------------------------
+
+const CHEAT_SHEET = [
+  ["mcpmaster help", "Every command"],
+  ["mcpmaster status", "Is it running?"],
+  ["mcpmaster add <url>", "Connect an API, GraphQL endpoint or MCP server"],
+  ["mcpmaster list", "What is connected"],
+  ["mcpmaster tools weather", "Search the tools by name or description"],
+  ["mcpmaster call <tool> '{\"a\":1}'", "Run one tool yourself"],
+  ["mcpmaster connect", "Snippets for Claude, Cursor, Codex, VS Code"],
+  ["mcpmaster stop && mcpmaster up", "Restart (after an upgrade)"],
+];
+
+function cheatSheet() {
+  return h("dl", { class: "cheats" }, CHEAT_SHEET.flatMap(([cmd, what]) => [
+    h("dt", {}, h("button", { type: "button", class: "cheat-cmd mono", "aria-label": `Copy: ${cmd}`, onclick: () => copy(cmd) }, cmd)),
+    h("dd", {}, what),
+  ]));
+}
+
+function guideStep(n, title, ...children) {
+  return h("li", { class: "guide-step" },
+    h("span", { class: "guide-n", "aria-hidden": "true" }, String(n)),
+    h("div", { class: "guide-body" }, h("b", {}, title), ...children));
+}
+
+function expect(text) {
+  return h("p", { class: "expect" }, h("span", {}, "You should see"), text);
+}
+
+function guideCard() {
+  const sample = EXAMPLES[1];
+  return h("section", { class: "card guide" },
+    h("h2", {}, "Get started in four steps"),
+    h("p", { class: "sub" }, "mcpmaster turns APIs and MCP servers into tools, and gives every agent you use one address for all of them."),
+    h("ol", { class: "guide-steps" },
+      guideStep(1, "mcpmaster is running", h("p", {}, "You're looking at it. The endpoint agents will use is ", h("code", {}, store.state.mcpUrl), ".")),
+      guideStep(2, "Add something to try",
+        h("p", {}, "This public countries API needs no account or key."),
+        h("div", { class: "actions" }, h("button", { class: "btn btn-primary", type: "button", onclick: () => addDialog(sample.input, sample.type) }, icon("plus"), "Add the Countries sample")),
+        expect("Connected countries with a handful of tools, listed under Integrations.")),
+      guideStep(3, "Connect your agent",
+        h("p", {}, "For Claude Code, run this in a terminal (other agents are on the Connect page):"),
+        codeBlock("claude mcp add mcpmaster -- npx -y mcpmaster@latest mcp"),
+        h("p", {}, h("a", { href: "#/connect" }, "Codex, Cursor, VS Code and others →")),
+        expect("mcpmaster in your agent's list of MCP servers, with one tool called execute. That is on purpose: it finds the other tools from inside, so your agent's context stays small.")),
+      guideStep(4, "Ask your agent to use it",
+        codeBlock("Use mcpmaster to look up which countries speak Portuguese and their capitals."),
+        expect("The agent calls execute, searches for a countries tool, and answers from real data. You never configured the tool in the agent itself."))),
+    h("details", { class: "cheat" }, h("summary", {}, "Command cheat sheet"), cheatSheet()));
+}
+
 function integrationsPage() {
   const { integrations, enabledToolCount } = store.state;
   if (integrations.length === 0) {
@@ -702,6 +762,7 @@ function integrationsPage() {
         h("h1", {}, "Connect your agents to ", h("em", {}, "anything"), "."),
         h("p", {}, "Paste any API or MCP server. mcpmaster turns it into tools and serves every one of them to Claude, Cursor, Codex and any other agent through a single MCP endpoint."),
         pasteBox()),
+      guideCard(),
       h("div", { class: "kinds" },
         [["OpenAPI", "REST APIs from a JSON or YAML spec — URL or local file."],
          ["GraphQL", "Any endpoint with introspection. Queries and mutations become tools."],
@@ -727,13 +788,31 @@ function integrationsPage() {
         h("div", { class: "right" }, `${s.toolCount} tools`, statusBadge(s))))));
 }
 
+// A tool description can be several paragraphs. In a row it shows three lines
+// with the rest one click away, rather than one long line that pushes the
+// row's controls off the screen. Line breaks are kept: collapsing them is what
+// glued sentences together ("…a list.Returns…").
+const CLAMP_CHARS = 180;
+function longText(text, cls = "tool-desc") {
+  const long = text.length > CLAMP_CHARS || text.includes("\n");
+  const body = h("div", { class: `${cls}${long ? " clamped" : ""}` }, text);
+  if (!long) return body;
+  const more = h("button", { type: "button", class: "more-link", "aria-expanded": "false" }, "Show more");
+  more.addEventListener("click", () => {
+    const open = body.classList.toggle("clamped") === false;
+    more.textContent = open ? "Show less" : "Show more";
+    more.setAttribute("aria-expanded", String(open));
+  });
+  return h("div", {}, body, more);
+}
+
 // One tool as a row with an exposure switch. Toggling replaces just this row.
 function switchRow(tool, onChange) {
   const input = h("input", { type: "checkbox", checked: tool.enabled, "aria-label": `Expose ${tool.name} to agents` });
   const row = h("div", { class: "list-row", "data-tool": tool.name },
-    h("div", {}, h("div", { class: "title mono" }, tool.name, accessBadge(tool), blockBadge(tool)),
-      tool.description ? h("div", { class: "meta" }, tool.description) : null),
-    h("label", { class: "switch", title: tool.enabled ? "Exposed to agents" : "Hidden from agents" }, input, h("span", {})));
+    h("div", { class: "tool-main" }, h("div", { class: "title mono" }, tool.name, accessBadge(tool), blockBadge(tool)),
+      tool.description ? longText(tool.description) : null),
+    h("label", { class: "switch tool-switch", title: tool.enabled ? "Exposed to agents" : "Hidden from agents" }, input, h("span", {})));
   input.addEventListener("change", async () => {
     const next = input.checked;
     input.disabled = true;
@@ -1180,7 +1259,7 @@ function toolDetail(tool, onChange) {
       tool.method ? h("span", { class: "badge type" }, `${tool.method} ${tool.path}`) : null,
       tool.operation ? h("span", { class: "badge type" }, tool.operation) : null,
       accessBadge(tool), " ", blockBadge(tool)),
-    tool.description ? h("p", {}, tool.description) : null,
+    tool.description ? h("p", { class: "full-desc" }, tool.description) : null,
     h("div", { class: "setting exposure" },
       h("div", {}, h("b", {}, tool.enabled ? "Exposed to agents" : "Hidden from agents"),
         h("p", {}, tool.blockedBy
@@ -1382,7 +1461,8 @@ function toolsPage({ page, detail }, params) {
       h("label", { class: "check" }, box),
       h("button", { class: "tool-pick", type: "button", "aria-current": current === tool.name ? "true" : undefined, onclick: () => select(tool.name) },
         h("div", { class: "n" }, tool.name),
-        tool.blockedBy ? h("div", { class: "d" }, `Hidden · ${tool.blockedBy.label}`) : tool.description ? h("div", { class: "d" }, tool.description) : null));
+        tool.blockedBy ? h("div", { class: "d" }, `Hidden · ${tool.blockedBy.label}`) : tool.description ? h("div", { class: "d" }, tool.description) : null,
+        !tool.blockedBy && tool.description && (tool.description.length > CLAMP_CHARS || tool.description.includes("\n")) ? h("span", { class: "more-hint" }, "Open for the full description") : null));
   };
 
   const paintList = () => {
@@ -1538,7 +1618,8 @@ function connectPage() {
     h("div", { class: "card" }, tabs, panel),
     h("div", { class: "card" }, h("h2", {}, "From the terminal"),
       h("p", { class: "sub" }, "Everything here also works without the UI:"),
-      codeBlock("mcpmaster connect")));
+      codeBlock("mcpmaster connect")),
+    h("details", { class: "card cheat cheat-card" }, h("summary", {}, "Command cheat sheet"), cheatSheet()));
 }
 
 function settingsPage() {

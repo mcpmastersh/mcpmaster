@@ -126,7 +126,7 @@ test("the open-source packages never point at the private repo's docs or interna
   // comment citing a design doc, a hosted source path or hosted-only
   // infrastructure is a dead reference there (and leaks internals).
   const root = fileURLToPath(new URL("../packages/", import.meta.url));
-  const pattern = /docs\/design\.md|docs\/reference|CLAUDE\.md|\.claude\/skills|src\/lib\/|src\/app\/|@\/lib|QStash|Vercel|Upstash|Neon\b|tools_summary/;
+  const pattern = /docs\/design\.md|docs\/reference|CLAUDE\.md|(?<!~\/)(?<!HOME\/)\.claude\/skills|src\/lib\/|src\/app\/|@\/lib|QStash|Vercel|Upstash|Neon\b|tools_summary/;
   const offenders: string[] = [];
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {
