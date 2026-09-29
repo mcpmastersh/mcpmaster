@@ -400,6 +400,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px;
 .cheat { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; }
 .cheat-card { padding: 14px 20px; margin-top: 16px; }
 .cheat summary { cursor: pointer; font-weight: 600; font-size: 14px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.cheat summary { list-style: none; align-items: center; }
+.cheat summary::-webkit-details-marker { display: none; }
+.cheat summary::after { content: "Show  ▾"; margin-left: auto; white-space: pre; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--foreground); font-size: 12.5px; font-weight: 500; line-height: 1; }
+.cheat[open] summary::after { content: "Hide  ▴"; }
+.cheat summary:hover::after { border-color: var(--accent); }
 .cheat summary .note { font-weight: 400; color: var(--muted); font-size: 13px; }
 .cheats { display: grid; grid-template-columns: minmax(0, max-content) 1fr; gap: 6px 16px; margin: 12px 0 0; align-items: center; }
 .cheats dd { margin: 0; color: var(--muted); font-size: 13.5px; }
