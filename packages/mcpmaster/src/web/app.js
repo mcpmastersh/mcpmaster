@@ -1640,7 +1640,7 @@ function connectPage() {
       h("p", {}, store.state.toolMode === "execute"
         ? "One entry gives an agent every integration you connect here, through a single execute tool that keeps its context small. New integrations show up without reconnecting."
         : "One entry gives an agent every integration you connect here. New integrations show up without reconnecting."))),
-    h("details", { class: "card cheat cheat-card", open: true }, h("summary", {}, "Command cheat sheet", h("span", { class: "note" }, "Click a command to copy it")), cheatSheet()),
+    h("details", { class: "card cheat cheat-card" }, h("summary", {}, "Command cheat sheet", h("span", { class: "note" }, "Click a command to copy it")), cheatSheet()),
     h("div", { class: "card" }, tabs, panel),
     h("div", { class: "card" }, h("h2", {}, "From the terminal"),
       h("p", { class: "sub" }, "Everything here also works without the UI:"),

@@ -6,6 +6,13 @@ uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-09-29
+
+### Changed
+
+- The command cheat sheet on the Connect page starts collapsed.
+  A Show/Hide button on the right of its header opens and closes it.
+
 ## [0.3.3] - 2026-09-29
 
 ### Changed
