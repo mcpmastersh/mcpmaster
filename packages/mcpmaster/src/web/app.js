@@ -345,12 +345,15 @@ function accessBadge(tool) {
 
 function sidebar(active) {
   const s = store.state;
-  const item = (page, label, iconName, count) =>
+  const attention = s.integrations.filter((i) => i.enabled && (i.status === "failed" || i.status === "needs_auth")).length;
+  const item = (page, label, iconName, count, warn = 0) =>
     h("a", { class: "nav-item", href: `#/${page}`, "aria-current": active === page ? "page" : undefined },
-      icon(iconName), label, count !== undefined ? h("span", { class: "count" }, count) : null);
+      icon(iconName), label,
+      warn ? h("span", { class: "nav-warn", title: `${warn} need${warn === 1 ? "s" : ""} attention` }, h("span", { class: "sr-only" }, `${warn} need${warn === 1 ? "s" : ""} attention`), String(warn)) : null,
+      count !== undefined ? h("span", { class: `count${warn ? " after-warn" : ""}` }, count) : null);
   return h("nav", { class: "sidebar", "aria-label": "Main" },
     h("div", { class: "brand" }, h("img", { src: "/logo.svg", alt: "" }), "mcpmaster", h("small", {}, `v${s.version}`)),
-    item("integrations", "Integrations", "plug", s.integrations.length),
+    item("integrations", "Integrations", "plug", s.integrations.length, attention),
     item("tools", "Tools", "tools", s.enabledToolCount),
     item("connect", "Connect an agent", "link"),
     item("settings", "Settings", "settings"),
@@ -706,12 +709,24 @@ function pasteBox() {
 
 const CHEAT_SHEET = [
   ["mcpmaster help", "Every command"],
+  ["mcpmaster up", "Start in the background and open this UI"],
   ["mcpmaster status", "Is it running?"],
+  ["mcpmaster start", "Run in the foreground instead of the background"],
   ["mcpmaster add <url>", "Connect an API, GraphQL endpoint or MCP server"],
   ["mcpmaster list", "What is connected"],
   ["mcpmaster tools weather", "Search the tools by name or description"],
+  ["mcpmaster tools block 'github_delete_*'", "Hide tools, one by one or by rule"],
   ["mcpmaster call <tool> '{\"a\":1}'", "Run one tool yourself"],
+  ["mcpmaster execute '<code>'", "Run a code-mode snippet, as an agent would"],
+  ["mcpmaster sync <name>", "Re-read an integration's tools"],
+  ["mcpmaster policy <name> --read-only", "Read-only, or review new tools before they go live"],
+  ["mcpmaster disable <name>", "Hide an integration (enable brings it back)"],
+  ["mcpmaster login <name>", "Sign in to an OAuth integration"],
+  ["mcpmaster remove <name>", "Delete an integration and its credential"],
+  ["mcpmaster settings", "Tool mode, private network access"],
   ["mcpmaster connect", "Snippets for Claude, Cursor, Codex, VS Code"],
+  ["mcpmaster token", "Print the local admin token (--rotate replaces it)"],
+  ["mcpmaster update", "Install the newest version"],
   ["mcpmaster stop && mcpmaster up", "Restart (after an upgrade)"],
 ];
 
@@ -803,6 +818,16 @@ function longText(text, cls = "tool-desc") {
     more.textContent = open ? "Show less" : "Show more";
     more.setAttribute("aria-expanded", String(open));
   });
+  // The character count is only a guess. The button is shown only when the
+  // clamped text really overflows, which can be measured once it's in the DOM
+  // and again whenever the width (so the wrapping) changes.
+  more.hidden = true;
+  const sync = () => {
+    if (!body.classList.contains("clamped")) return;
+    more.hidden = body.scrollHeight <= body.clientHeight + 1;
+  };
+  if (typeof ResizeObserver === "function") new ResizeObserver(sync).observe(body);
+  else more.hidden = false;
   return h("div", {}, body, more);
 }
 
@@ -1615,11 +1640,11 @@ function connectPage() {
       h("p", {}, store.state.toolMode === "execute"
         ? "One entry gives an agent every integration you connect here, through a single execute tool that keeps its context small. New integrations show up without reconnecting."
         : "One entry gives an agent every integration you connect here. New integrations show up without reconnecting."))),
+    h("details", { class: "card cheat cheat-card", open: true }, h("summary", {}, "Command cheat sheet", h("span", { class: "note" }, "Click a command to copy it")), cheatSheet()),
     h("div", { class: "card" }, tabs, panel),
     h("div", { class: "card" }, h("h2", {}, "From the terminal"),
       h("p", { class: "sub" }, "Everything here also works without the UI:"),
-      codeBlock("mcpmaster connect")),
-    h("details", { class: "card cheat cheat-card" }, h("summary", {}, "Command cheat sheet"), cheatSheet()));
+      codeBlock("mcpmaster connect")));
 }
 
 function settingsPage() {
