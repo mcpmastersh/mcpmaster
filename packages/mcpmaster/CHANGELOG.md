@@ -8,6 +8,16 @@ uses [semantic versioning](https://semver.org/).
 
 ## [0.3.3] - 2026-09-29
 
+### Changed
+
+- The command cheat sheet covers every day-to-day command (tools, policy,
+  sync, login, settings, update and more), not just the first eight.
+- The command cheat sheet is at the top of the Connect page, open by default, and
+  the sidebar shows how many integrations need attention.
+- A new logo: a bold M whose strokes meet in one node, clearer at favicon size.
+
+## [0.3.2] - 2026-09-29
+
 ### Added
 
 - `mcpmaster update` upgrades an install in place, with troubleshooting for
@@ -18,11 +28,6 @@ uses [semantic versioning](https://semver.org/).
 
 ### Changed
 
-- The command cheat sheet covers every day-to-day command (tools, policy,
-  sync, login, settings, update and more), not just the first eight.
-- A new logo: a bold M whose strokes meet in one node, clearer at favicon size.
-- The command cheat sheet is at the top of the Connect page, open by default, and
-  the sidebar shows how many integrations need attention.
 - Long tool descriptions in the local UI wrap, with a "Show more" toggle shown
   only when the text is actually cut off, and the exposure switch stays pinned
   in view.
