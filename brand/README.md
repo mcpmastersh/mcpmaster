@@ -62,6 +62,12 @@ follows the system setting, not your page's toggle.
 
 **Social cards, app stores, avatars.** `png/mcpmaster-logo-{light,dark}-512.png`.
 
+**Profile pictures (GitHub org, X, LinkedIn, Discord).** Use
+[`png/mcpmaster-avatar-500.png`](png/mcpmaster-avatar-500.png)
+([SVG](mcpmaster-avatar.svg)): the mark on a full-bleed dark square with no tile
+or rounded corners, because those sites crop avatars to their own rounded
+square or circle. It's the avatar of the `mcpmastersh` GitHub organization.
+
 **In a list of MCP servers, integrations or tools.** The mark on its own, at the
 same size as the other logos in the list.
 
