@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 730" width="1240" height="730" role="img" aria-labelledby="t d">
+<title id="t">mcpmaster web UI</title>
+<desc id="d">The mcpmaster integrations page at 127.0.0.1:7437: five integrations (github, stripe, linear, countries, files) with 1,642 tools behind one endpoint, and an agent calling the single execute tool with a short snippet that returns only the issue titles.</desc>
+<style>
+  text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .m { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+  .anim { animation-duration: 12.0s; animation-iteration-count: infinite; animation-timing-function: linear; }
+  @keyframes u0 { 0% { clip-path: inset(0 100% 0 0); } 10.00%, 21.67% { clip-path: inset(0 0 0 0); } 23.33%, 100% { clip-path: inset(0 100% 0 0); } }
+  @keyframes c0 { 0%, 0.00% { opacity: 1; transform: translateX(0); } 0.01% { opacity: 1; transform: translateX(0); } 10.00%, 21.67% { opacity: 1; transform: translateX(var(--w)); } 23.33% { opacity: 1; transform: translateX(0); } 23.34%, 100% { opacity: 0; transform: translateX(0); } }
+  @keyframes u1 { 0%, 25.00% { clip-path: inset(0 100% 0 0); } 35.00%, 46.67% { clip-path: inset(0 0 0 0); } 48.33%, 100% { clip-path: inset(0 100% 0 0); } }
+  @keyframes c1 { 0%, 25.00% { opacity: 0; transform: translateX(0); } 25.01% { opacity: 1; transform: translateX(0); } 35.00%, 46.67% { opacity: 1; transform: translateX(var(--w)); } 48.33% { opacity: 1; transform: translateX(0); } 48.34%, 100% { opacity: 0; transform: translateX(0); } }
+  @keyframes u2 { 0%, 50.00% { clip-path: inset(0 100% 0 0); } 60.00%, 71.67% { clip-path: inset(0 0 0 0); } 73.33%, 100% { clip-path: inset(0 100% 0 0); } }
+  @keyframes c2 { 0%, 50.00% { opacity: 0; transform: translateX(0); } 50.01% { opacity: 1; transform: translateX(0); } 60.00%, 71.67% { opacity: 1; transform: translateX(var(--w)); } 73.33% { opacity: 1; transform: translateX(0); } 73.34%, 100% { opacity: 0; transform: translateX(0); } }
+  @keyframes u3 { 0%, 75.00% { clip-path: inset(0 100% 0 0); } 85.00%, 96.67% { clip-path: inset(0 0 0 0); } 98.33%, 100% { clip-path: inset(0 100% 0 0); } }
+  @keyframes c3 { 0%, 75.00% { opacity: 0; transform: translateX(0); } 75.01% { opacity: 1; transform: translateX(0); } 85.00%, 96.67% { opacity: 1; transform: translateX(var(--w)); } 98.33% { opacity: 1; transform: translateX(0); } 98.34%, 100% { opacity: 0; transform: translateX(0); } }
+  @keyframes l0 { 0%, 8.33% { opacity: 0; } 9.53%, 95% { opacity: 1; } 97%, 100% { opacity: 0; } }
+  @keyframes l1 { 0%, 11.67% { opacity: 0; } 12.87%, 95% { opacity: 1; } 97%, 100% { opacity: 0; } }
+  @keyframes l2 { 0%, 15.00% { opacity: 0; } 16.20%, 95% { opacity: 1; } 97%, 100% { opacity: 0; } }
+  @keyframes l3 { 0%, 18.33% { opacity: 0; } 19.53%, 95% { opacity: 1; } 97%, 100% { opacity: 0; } }
+  @keyframes l4 { 0%, 21.67% { opacity: 0; } 22.87%, 95% { opacity: 1; } 97%, 100% { opacity: 0; } }
+  @keyframes l5 { 0%, 25.00% { opacity: 0; } 26.20%, 95% { opacity: 1; } 97%, 100% { opacity: 0; } }
+  @keyframes l6 { 0%, 28.33% { opacity: 0; } 29.53%, 95% { opacity: 1; } 97%, 100% { opacity: 0; } }
+  @keyframes l7 { 0%, 31.67% { opacity: 0; } 32.87%, 95% { opacity: 1; } 97%, 100% { opacity: 0; } }
+  @keyframes hit { 0%, 18.33% { opacity: 0; } 21.33% { opacity: 1; } 30.33%, 100% { opacity: 0; } }
+  .u0 { animation-name: u0; } .c0 { animation-name: c0; } .u1 { animation-name: u1; } .c1 { animation-name: c1; } .u2 { animation-name: u2; } .c2 { animation-name: c2; } .u3 { animation-name: u3; } .c3 { animation-name: c3; }
+  .l0 { animation-name: l0; } .l1 { animation-name: l1; } .l2 { animation-name: l2; } .l3 { animation-name: l3; } .l4 { animation-name: l4; } .l5 { animation-name: l5; } .l6 { animation-name: l6; } .l7 { animation-name: l7; }
+  .hit { animation-name: hit; }
+  @media (prefers-reduced-motion: reduce) {
+    .anim { animation: none !important; }
+    .u1, .u2, .u3, .c1, .c2, .c3, .hit { opacity: 0; }
+  }
+</style>
+<defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7bff"/><stop offset="1" stop-color="#5a46f0"/></linearGradient><filter id="sh" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="rgba(16,16,24,.18)"/></filter></defs>
+<rect x="20" y="20" width="1200" height="600" rx="18" fill="#ffffff" stroke="#d6d6de" filter="url(#sh)"/>
+<path d="M20 70V38a18 18 0 0 1 18-18h1164a18 18 0 0 1 18 18v32z" fill="#f3f3f6"/>
+<line x1="20" y1="70" x2="1220" y2="70" stroke="#e7e7ec"/>
+<circle cx="44" cy="45" r="6" fill="#d6d6de"/><circle cx="64" cy="45" r="6" fill="#d6d6de"/><circle cx="84" cy="45" r="6" fill="#d6d6de"/>
+<rect x="440" y="31" width="360" height="28" rx="8" fill="#ffffff" stroke="#e7e7ec"/>
+<g fill="none" stroke="#6b6b78" stroke-width="1.4"><rect x="532" y="44" width="10" height="8" rx="1.5"/><path d="M534 44v-2.5a3 3 0 0 1 6 0V44"/></g>
+<text x="550" y="51" class="m" font-size="12.5" fill="#6b6b78">127.0.0.1:7437/integrations</text>
+<line x1="250" y1="70" x2="250" y2="620" stroke="#e7e7ec"/>
+<rect x="40" y="88" width="24" height="24" rx="6" fill="url(#lg)"/><path d="M46 105V95l6 6.5 6-6.5v10" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="74" y="106" font-size="16" font-weight="600" fill="#121216" letter-spacing="-.2">mcpmaster</text>
+<rect x="32" y="128" width="204" height="36" rx="8" fill="#efecff"/>
+<rect x="46" y="141" width="13" height="13" rx="3" fill="none" stroke="#4a37d9" stroke-width="1.5" opacity=".85"/>
+<text x="70" y="152" font-size="14" font-weight="600" fill="#4a37d9">Integrations</text>
+<text x="222" y="152" text-anchor="end" class="m" font-size="11.5" fill="#6b6b78">5</text>
+<rect x="46" y="183" width="13" height="13" rx="3" fill="none" stroke="#3d3d47" stroke-width="1.5" opacity=".85"/>
+<text x="70" y="194" font-size="14" font-weight="400" fill="#3d3d47">Tools</text>
+<text x="222" y="194" text-anchor="end" class="m" font-size="11.5" fill="#6b6b78">1,642</text>
+<rect x="46" y="225" width="13" height="13" rx="3" fill="none" stroke="#3d3d47" stroke-width="1.5" opacity=".85"/>
+<text x="70" y="236" font-size="14" font-weight="400" fill="#3d3d47">Playground</text>
+<rect x="46" y="267" width="13" height="13" rx="3" fill="none" stroke="#3d3d47" stroke-width="1.5" opacity=".85"/>
+<text x="70" y="278" font-size="14" font-weight="400" fill="#3d3d47">Connect</text>
+<rect x="46" y="309" width="13" height="13" rx="3" fill="none" stroke="#3d3d47" stroke-width="1.5" opacity=".85"/>
+<text x="70" y="320" font-size="14" font-weight="400" fill="#3d3d47">Settings</text>
+<line x1="32" y1="560" x2="236" y2="560" stroke="#e7e7ec"/>
+<circle cx="46" cy="583" r="4" fill="#067647"/><text x="58" y="587" class="m" font-size="12" fill="#067647">running</text>
+<text x="40" y="607" class="m" font-size="12" fill="#6b6b78">tool mode: execute</text>
+<text x="280" y="112" font-size="21" font-weight="600" fill="#121216" letter-spacing="-.4">Integrations</text>
+<text x="280" y="135" font-size="13.5" fill="#6b6b78">Everything here is served to every connected agent.</text>
+<rect x="1112" y="92" width="78" height="34" rx="9" fill="#121216"/><text x="1151" y="114" text-anchor="middle" font-size="13.5" font-weight="500" fill="#ffffff">+ Add</text>
+<rect x="280" y="152" width="910" height="42" rx="10" fill="#f3f3f6" stroke="#d6d6de" stroke-dasharray="4 4"/>
+<path d="M298 173h12M304 167v12" stroke="#6b6b78" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="1128" y="162" width="50" height="22" rx="5" fill="none" stroke="#d6d6de"/><text x="1153" y="177" text-anchor="middle" class="m" font-size="11" fill="#6b6b78">↵ add</text>
+<text x="322" y="178" class="m anim u0" font-size="13.5" fill="#3d3d47" xml:space="preserve">https://api.github.com/openapi.json</text>
+<rect x="322" y="163" width="1.6" height="20" fill="#5a46f0" class="anim c0" style="--w:283.5px;transform:translateX(283.5px)"/>
+<text x="322" y="178" class="m anim u1" font-size="13.5" fill="#3d3d47" xml:space="preserve">https://countries.trevorblades.com/graphql</text>
+<rect x="322" y="163" width="1.6" height="20" fill="#5a46f0" class="anim c1" style="--w:340.2px;opacity:0"/>
+<text x="322" y="178" class="m anim u2" font-size="13.5" fill="#3d3d47" xml:space="preserve">https://mcp.linear.app/mcp</text>
+<rect x="322" y="163" width="1.6" height="20" fill="#5a46f0" class="anim c2" style="--w:210.6px;opacity:0"/>
+<text x="322" y="178" class="m anim u3" font-size="13.5" fill="#3d3d47" xml:space="preserve">-- npx -y @modelcontextprotocol/server-filesystem ~/code</text>
+<rect x="322" y="163" width="1.6" height="20" fill="#5a46f0" class="anim c3" style="--w:453.6px;opacity:0"/>
+<rect x="280" y="210" width="910" height="330" rx="12" fill="#ffffff" stroke="#e7e7ec"/>
+<path d="M280 244v-22a12 12 0 0 1 12-12h886a12 12 0 0 1 12 12v22z" fill="#f3f3f6"/>
+<line x1="280" y1="244" x2="1190" y2="244" stroke="#e7e7ec"/>
+<text x="340" y="232" font-size="11" font-weight="500" letter-spacing="1" fill="#6b6b78">NAME</text>
+<text x="700" y="232" font-size="11" font-weight="500" letter-spacing="1" fill="#6b6b78">TYPE</text>
+<text x="890" y="232" font-size="11" font-weight="500" letter-spacing="1" fill="#6b6b78">TOOLS</text>
+<text x="1040" y="232" font-size="11" font-weight="500" letter-spacing="1" fill="#6b6b78">STATUS</text>
+<rect x="281" y="245" width="908" height="57" fill="#efecff" class="anim hit" opacity="0"/>
+<rect x="296" y="256" width="32" height="32" rx="8" fill="#f3f3f6" stroke="#e7e7ec"/><text x="312" y="276" text-anchor="middle" class="m" font-size="11.5" font-weight="600" fill="#3d3d47">GH</text>
+<text x="340" y="270" font-size="14.5" font-weight="500" fill="#121216">github</text>
+<text x="340" y="289" class="m" font-size="12" fill="#6b6b78">api.github.com</text>
+<rect x="700" y="261" width="68" height="24" rx="6" fill="#ffffff" stroke="#e7e7ec"/><text x="709" y="277" class="m" font-size="11.5" fill="#3d3d47">openapi</text>
+<text x="890" y="277" class="m" font-size="13" fill="#3d3d47">1,081</text>
+<circle cx="1044" cy="273" r="3.5" fill="#b54708"/><text x="1054" y="277" font-size="13" fill="#b54708">read-only</text>
+<line x1="280" y1="303" x2="1190" y2="303" stroke="#e7e7ec"/>
+<rect x="296" y="315" width="32" height="32" rx="8" fill="#f3f3f6" stroke="#e7e7ec"/><text x="312" y="335" text-anchor="middle" class="m" font-size="11.5" font-weight="600" fill="#3d3d47">ST</text>
+<text x="340" y="329" font-size="14.5" font-weight="500" fill="#121216">stripe</text>
+<text x="340" y="348" class="m" font-size="12" fill="#6b6b78">api.stripe.com</text>
+<rect x="700" y="320" width="68" height="24" rx="6" fill="#ffffff" stroke="#e7e7ec"/><text x="709" y="336" class="m" font-size="11.5" fill="#3d3d47">openapi</text>
+<text x="890" y="336" class="m" font-size="13" fill="#3d3d47">512</text>
+<circle cx="1044" cy="332" r="3.5" fill="#067647"/><text x="1054" y="336" font-size="13" fill="#067647">active</text>
+<line x1="280" y1="362" x2="1190" y2="362" stroke="#e7e7ec"/>
+<rect x="296" y="374" width="32" height="32" rx="8" fill="#f3f3f6" stroke="#e7e7ec"/><text x="312" y="394" text-anchor="middle" class="m" font-size="11.5" font-weight="600" fill="#3d3d47">LN</text>
+<text x="340" y="388" font-size="14.5" font-weight="500" fill="#121216">linear</text>
+<text x="340" y="407" class="m" font-size="12" fill="#6b6b78">mcp.linear.app/mcp</text>
+<rect x="700" y="379" width="97" height="24" rx="6" fill="#ffffff" stroke="#e7e7ec"/><text x="709" y="395" class="m" font-size="11.5" fill="#3d3d47">mcp · oauth</text>
+<text x="890" y="395" class="m" font-size="13" fill="#3d3d47">24</text>
+<circle cx="1044" cy="391" r="3.5" fill="#067647"/><text x="1054" y="395" font-size="13" fill="#067647">active</text>
+<line x1="280" y1="421" x2="1190" y2="421" stroke="#e7e7ec"/>
+<rect x="296" y="433" width="32" height="32" rx="8" fill="#f3f3f6" stroke="#e7e7ec"/><text x="312" y="453" text-anchor="middle" class="m" font-size="11.5" font-weight="600" fill="#3d3d47">CT</text>
+<text x="340" y="447" font-size="14.5" font-weight="500" fill="#121216">countries</text>
+<text x="340" y="466" class="m" font-size="12" fill="#6b6b78">countries.trevorblades.com</text>
+<rect x="700" y="438" width="68" height="24" rx="6" fill="#ffffff" stroke="#e7e7ec"/><text x="709" y="454" class="m" font-size="11.5" fill="#3d3d47">graphql</text>
+<text x="890" y="454" class="m" font-size="13" fill="#3d3d47">9</text>
+<circle cx="1044" cy="450" r="3.5" fill="#067647"/><text x="1054" y="454" font-size="13" fill="#067647">active</text>
+<line x1="280" y1="480" x2="1190" y2="480" stroke="#e7e7ec"/>
+<rect x="296" y="492" width="32" height="32" rx="8" fill="#f3f3f6" stroke="#e7e7ec"/><text x="312" y="512" text-anchor="middle" class="m" font-size="11.5" font-weight="600" fill="#3d3d47">FS</text>
+<text x="340" y="506" font-size="14.5" font-weight="500" fill="#121216">files</text>
+<text x="340" y="525" class="m" font-size="12" fill="#6b6b78">npx server-filesystem ~/code</text>
+<rect x="700" y="497" width="54" height="24" rx="6" fill="#ffffff" stroke="#e7e7ec"/><text x="709" y="513" class="m" font-size="11.5" fill="#3d3d47">stdio</text>
+<text x="890" y="513" class="m" font-size="13" fill="#3d3d47">16</text>
+<circle cx="1044" cy="509" r="3.5" fill="#067647"/><text x="1054" y="513" font-size="13" fill="#067647">active</text>
+<g filter="url(#sh)"><rect x="700" y="430" width="520" height="280" rx="14" fill="#0f0f14" stroke="#26262f"/></g>
+<text x="722" y="458" class="m" font-size="12.5"><tspan fill="#e8e8ee" font-weight="600">execute</tspan><tspan fill="#8a8a9e"> · called by Claude Code</tspan></text>
+<line x1="700" y1="472" x2="1220" y2="472" stroke="#1f1f28"/>
+<text x="722" y="500" class="m anim l0" font-size="13.5" xml:space="preserve"><tspan fill="#c4b5fd">const</tspan><tspan fill="#e8e8ee"> { items } = </tspan><tspan fill="#c4b5fd">await</tspan><tspan fill="#e8e8ee"> tools.</tspan><tspan fill="#93c5fd">search</tspan><tspan fill="#e8e8ee">({</tspan></text>
+<text x="722" y="525" class="m anim l1" font-size="13.5" xml:space="preserve"><tspan fill="#e8e8ee">  query: </tspan><tspan fill="#86efac">"open issues"</tspan><tspan fill="#e8e8ee">,</tspan></text>
+<text x="722" y="550" class="m anim l2" font-size="13.5" xml:space="preserve"><tspan fill="#e8e8ee">});</tspan></text>
+<text x="722" y="575" class="m anim l3" font-size="13.5" xml:space="preserve"><tspan fill="#c4b5fd">const</tspan><tspan fill="#e8e8ee"> issues = </tspan><tspan fill="#c4b5fd">await</tspan><tspan fill="#e8e8ee"> tools[items[</tspan><tspan fill="#fcd34d">0</tspan><tspan fill="#e8e8ee">].path]({</tspan></text>
+<text x="722" y="600" class="m anim l4" font-size="13.5" xml:space="preserve"><tspan fill="#e8e8ee">  repo: </tspan><tspan fill="#86efac">"acme/api"</tspan><tspan fill="#e8e8ee">, state: </tspan><tspan fill="#86efac">"open"</tspan><tspan fill="#e8e8ee">,</tspan></text>
+<text x="722" y="625" class="m anim l5" font-size="13.5" xml:space="preserve"><tspan fill="#e8e8ee">});</tspan></text>
+<text x="722" y="650" class="m anim l6" font-size="13.5" xml:space="preserve"><tspan fill="#c4b5fd">return</tspan><tspan fill="#e8e8ee"> issues.</tspan><tspan fill="#93c5fd">map</tspan><tspan fill="#e8e8ee">(i =&gt; i.title);</tspan></text>
+<text x="722" y="675" class="m anim l7" font-size="13.5" xml:space="preserve"><tspan fill="#8a8a9e">// only the titles reach the agent</tspan></text>
+</svg>
