@@ -6,6 +6,14 @@ uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-09-30
+
+### Changed
+
+- A refreshed README: light/dark logo header, a "works with" client row, a
+  screenshot of the local UI and a Brand section pointing at the new logo
+  files, PNG exports and usage notes.
+
 ## [0.3.4] - 2026-09-29
 
 ### Changed

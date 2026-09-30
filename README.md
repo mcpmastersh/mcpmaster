@@ -1,11 +1,29 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/src/web/logo.svg" width="56" height="56" alt="mcpmaster">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/mcpmaster-logo-dark.svg">
+    <img src="brand/mcpmaster-logo-light.svg" width="56" height="56" alt="mcpmaster">
+  </picture>
 </p>
 
 <h1 align="center">mcpmaster</h1>
 
 <p align="center"><b>Connect your agents to anything.</b><br>
 One local MCP endpoint for every API and MCP server you use, with a web UI to manage them.</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/mcpmaster"><img alt="npm" src="https://img.shields.io/npm/v/mcpmaster?color=8b7bff&label=npm"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8b7bff"></a>
+  <img alt="Node.js 20+" src="https://img.shields.io/badge/node-%E2%89%A520-8b7bff">
+  <a href="https://mcpmastersh.github.io/mcpmaster/"><img alt="Website" src="https://img.shields.io/badge/website-mcpmaster-121216"></a>
+  <a href="https://mcpmaster.sh/"><img alt="Cloud: mcpmaster.sh" src="https://img.shields.io/badge/cloud-mcpmaster.sh-121216"></a>
+</p>
+
+<p align="center"><sub>Works with &nbsp; <img src="docs/icons/claude.svg" width="16" height="16" alt=""> Claude Code &nbsp;·&nbsp; <img src="docs/icons/codex.svg" width="16" height="16" alt=""> Codex &nbsp;·&nbsp; <img src="docs/icons/cursor.svg" width="16" height="16" alt=""> Cursor &nbsp;·&nbsp; <img src="docs/icons/claude.svg" width="16" height="16" alt=""> Claude Desktop &nbsp;·&nbsp; <img src="docs/icons/vscode.svg" width="16" height="16" alt=""> VS Code &nbsp;·&nbsp; <img src="docs/icons/windsurf.svg" width="16" height="16" alt=""> Windsurf &nbsp;·&nbsp; <img src="docs/icons/opencode.svg" width="16" height="16" alt=""> OpenCode &nbsp;·&nbsp; <img src="docs/icons/mcp.svg" width="16" height="16" alt=""> Streamable HTTP</sub></p>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/mcpmaster-ui-dark.svg">
+  <img alt="The mcpmaster web UI at 127.0.0.1:7437: five integrations (github, stripe, linear, countries, files) with 1,642 tools behind one endpoint, while Claude Code calls the single execute tool with a short snippet that returns only the issue titles." src="docs/mcpmaster-ui-light.svg" width="100%">
+</picture>
 
 ---
 
@@ -21,7 +39,38 @@ needs, calls them and returns only the part of the result it wants. Three
 large APIs can add up to well over a thousand tool schemas, and none of them
 land in the agent's context up front.
 
-## Install
+<table>
+  <tr>
+    <td width="33%" valign="top"><b>🔌 One endpoint</b><br>OpenAPI, GraphQL, remote MCP servers and local stdio commands, all behind one connection.</td>
+    <td width="33%" valign="top"><b>🧠 One tool, not a thousand</b><br>Agents see a single <code>execute</code> tool: ~515 tokens instead of ~401,000.</td>
+    <td width="33%" valign="top"><b>🧪 Sandboxed code mode</b><br>Snippets run in QuickJS (WebAssembly) with no network, filesystem or host access.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>🛡️ Guardrails</b><br>Block rules, read-only and review apply on every listing and call, even to tools that don't exist yet.</td>
+    <td valign="top"><b>🔐 Keys never shown</b><br>Credentials are used, never displayed, and stripped from any response that echoes them.</td>
+    <td valign="top"><b>🖥️ Fast web UI</b><br>Browse thousands of tools, run them with your own arguments and try snippets the way an agent writes them.</td>
+  </tr>
+</table>
+
+## Contents
+
+- [📦 Install](#install)
+- [🤖 Connect your agent](#connect-your-agent)
+- [🔌 Add integrations](#add-integrations)
+- [🧠 How agents call your tools](#how-agents-call-your-tools)
+- [🛡️ Control what agents can reach](#control-what-agents-can-reach)
+- [⌨️ Use it](#use-it)
+- [🔐 Security](#security)
+- [🗝️ Pairs with mcpv](#pairs-with-mcpv)
+- [☁️ mcpmaster Cloud](#mcpmaster-cloud)
+- [⬆️ Upgrade](#upgrade)
+- [🩺 Troubleshooting](#troubleshooting)
+- [❓ FAQ](#faq)
+- [🛠️ Develop](#develop)
+
+<a id="install"></a>
+
+## 📦 Install
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/install.sh | sh
@@ -31,7 +80,9 @@ This installs one file, starts mcpmaster in the background and opens the web
 UI. Requires Node.js 20+. Prefer npm? Use `npm i -g mcpmaster`, or skip the
 install entirely with `npx mcpmaster up`.
 
-## Connect your agent
+<a id="connect-your-agent"></a>
+
+## 🤖 Connect your agent
 
 **Easiest: let your agent do it.** Paste this into Claude Code, Codex, Cursor or
 any coding agent:
@@ -74,73 +125,9 @@ Or connect by hand:
 `mcpmaster connect` prints all of these. `mcpmaster connect claude-code | sh`
 runs the Claude Code one.
 
-## Upgrade
+<a id="add-integrations"></a>
 
-Run the installer again. It fetches the newest version straight from the npm
-registry (so a stale npm cache can't hold you back), restarts the background
-server and keeps your integrations and credentials.
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/install.sh | sh
-mcpmaster --version
-```
-
-Already installed? The command does the same thing:
-
-```sh
-mcpmaster update           # install the newest version
-mcpmaster update --check   # only say whether one is available
-```
-
-Installed with npm? Use `npm i -g mcpmaster@latest --prefer-online`, then
-`mcpmaster stop && mcpmaster up`: a server started by the old version keeps
-running the old code. `npm update -g` takes package names only
-(`npm update -g mcpmaster`); to pick a version use `npm i -g mcpmaster@0.3.1`.
-
-## Troubleshooting
-
-### `npm i -g mcpmaster` fails with `EEXIST: file already exists`
-
-```
-npm error code EEXIST
-npm error path /Users/you/.local/bin/mcpmaster
-npm error File exists: /Users/you/.local/bin/mcpmaster
-```
-
-The one-line installer already put a `mcpmaster` command at that path, and npm
-refuses to overwrite a file it didn't create. You don't need npm: run
-`mcpmaster update`, or the installer again. To move to the npm copy instead,
-remove the installer's file first:
-
-```sh
-rm ~/.local/bin/mcpmaster
-npm i -g mcpmaster@latest --prefer-online
-```
-
-`--force` also works, but overwrites the file without asking. Your integrations
-and credentials live in `~/.mcpmaster` and are not touched either way.
-
-### `npm update -g mcpmaster` says "up to date" but the version is old
-
-npm answers from cached registry data, or updated a different copy than the
-one that runs. Check, then bypass the cache:
-
-```sh
-mcpmaster --version                # what actually runs
-which -a mcpmaster                 # every copy on your PATH, in order
-npm i -g mcpmaster@latest --prefer-online
-mcpmaster update                   # or skip npm entirely
-```
-
-Still stale? `npm cache clean --force`. `npx mcpmaster …` keeps a separate
-cache: use `npx --yes mcpmaster@latest --version`, or `rm -rf ~/.npm/_npx`.
-
-### The version changed but the web UI looks the same
-
-The background server keeps running the code it started with. Restart it:
-`mcpmaster stop && mcpmaster up`.
-
-## Add integrations
+## 🔌 Add integrations
 
 In the web UI (`mcpmaster up`), paste anything into the box. From the terminal:
 
@@ -164,7 +151,8 @@ printf %s "$KEY" | mcpmaster add https://api.example.com/spec.json --api-key=X-A
 mcpmaster add --env API_KEY=… -- npx -y some-mcp-server
 ```
 
-### OAuth2 with your own client
+<details>
+<summary><b>🔑 OAuth2 with your own client</b></summary>
 
 For an API that wants OAuth2 with an app you registered on the provider
 (GitHub, Google, Atlassian, Salesforce, your own IdP…), give mcpmaster the
@@ -214,7 +202,17 @@ to skip detection. Each integration gets a short name (`--name` to choose it).
 That name becomes its tool prefix, so agents see `github_list_repos`,
 `countries_country` and so on.
 
-## How agents call your tools
+</details>
+
+<a id="how-agents-call-your-tools"></a>
+
+## 🧠 How agents call your tools
+
+| | Every schema up front | mcpmaster, default mode |
+| --- | --- | --- |
+| Tools in context | 1,600+ definitions | 1 `execute` tool |
+| Tokens before the first message | ~401,000 | ~515 |
+| New integrations | Reconnect or reload | Show up in agents already connected |
 
 By default (`mcpmaster settings tools execute`), agents get one `execute` tool.
 Its description lists your integrations, and the agent's code does the rest:
@@ -238,7 +236,9 @@ To list every tool individually instead, for a client that can't run code,
 use `mcpmaster settings tools all`. You can also set `MCPMASTER_TOOL_MODE=all`
 for a single agent's process. Direct calls by full name work in both modes.
 
-## Control what agents can reach
+<a id="control-what-agents-can-reach"></a>
+
+## 🛡️ Control what agents can reach
 
 ```sh
 mcpmaster tools block github_delete_repo       # one tool
@@ -272,7 +272,9 @@ The web UI has the same controls: switches per tool, block rules with a live
 match count on the Tools page, and read-only and review switches on each
 integration.
 
-## Use it
+<a id="use-it"></a>
+
+## ⌨️ Use it
 
 ```sh
 mcpmaster tools              # tools, 50 at a time (--offset n, --limit n, --all)
@@ -296,7 +298,9 @@ expose them in one go, run any tool with your own arguments, and try snippets
 the way an agent writes them. The connect snippets for each agent are there
 too.
 
-## Security
+<a id="security"></a>
+
+## 🔐 Security
 
 mcpmaster runs on your machine, and it's built on the assumption that a web
 page in your browser may be hostile:
@@ -333,9 +337,36 @@ page in your browser may be hostile:
   access and refresh tokens live in `secrets.json`. They're never shown, and
   they're removed from any response that echoes them.
 
-## mcpmaster Cloud
+<a id="pairs-with-mcpv"></a>
 
-This is the open-source, self-hosted core of [mcpmaster](https://mcpmaster.com).
+## 🗝️ Pairs with mcpv
+
+Keep the keys out of the chat, too. [**mcpv**](https://github.com/mcpmastersh/mcpv) is the offline, encrypted vault
+for the secrets your app needs. Your `.env` holds `mcpm://` addresses, not values, and your agent runs the app
+without ever reading a key.
+
+```bash
+DATABASE_URL=mcpm://acme/api/dev/DATABASE_URL
+STRIPE_KEY=mcpm://acme/api/dev/STRIPE_KEY
+
+$ mcpv run -- npm run dev
+  connected to postgres://app:[redacted]@db
+```
+
+<a id="mcpmaster-cloud"></a>
+
+## ☁️ mcpmaster Cloud
+
+| **Self-hosted** | **Cloud** |
+| --- | --- |
+| Free, Apache-2.0. Runs on your machine. | 14-day trial. Hosted at [mcpmaster.sh](https://mcpmaster.sh/). Nothing to install. |
+| ✅ Unified MCP endpoint | ✅ Hosted endpoint for every agent |
+| ✅ Code mode, guardrails, web UI | ✅ Workspaces, team roles, private workspaces behind OAuth |
+| ✅ Secret vault with [mcpv](https://github.com/mcpmastersh/mcpv) | ✅ Agent Secrets, same `mcpm://` format as mcpv |
+| — Team roles and workspaces | ✅ Website crawling and a chat widget |
+| — Audit trail and instant revocation | ✅ Audit trail and instant access revocation |
+
+This is the open-source, self-hosted core of [mcpmaster](https://mcpmaster.sh/).
 Cloud runs the same integration engine
 ([`@mcpmaster/core`](packages/core): translation, dispatch, egress, redaction).
 On top of it Cloud adds a hosted endpoint, workspaces with team access
@@ -345,12 +376,125 @@ chat widget, and an audit trail.
 **Can I mix Cloud and self-hosted?** Yes, in either direction:
 
 - An agent can connect to more than one mcpmaster: your local one and a Cloud
-  workspace (`https://mcpmaster.com/api/mcp/<workspace>`).
+  workspace (`https://mcpmaster.sh/api/mcp/<workspace>`).
 - A Cloud workspace can also be added to your local mcpmaster as a remote MCP
   integration. Private workspaces use the same OAuth sign-in as any other MCP
   server.
 
-## Develop
+<a id="upgrade"></a>
+
+## ⬆️ Upgrade
+
+Run the installer again. It fetches the newest version straight from the npm
+registry (so a stale npm cache can't hold you back), restarts the background
+server and keeps your integrations and credentials.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/install.sh | sh
+mcpmaster --version
+```
+
+Already installed? The command does the same thing:
+
+```sh
+mcpmaster update           # install the newest version
+mcpmaster update --check   # only say whether one is available
+```
+
+Installed with npm? Use `npm i -g mcpmaster@latest --prefer-online`, then
+`mcpmaster stop && mcpmaster up`: a server started by the old version keeps
+running the old code. `npm update -g` takes package names only
+(`npm update -g mcpmaster`); to pick a version use `npm i -g mcpmaster@0.3.1`.
+
+<a id="troubleshooting"></a>
+
+## 🩺 Troubleshooting
+
+<details>
+<summary><b><code>npm i -g mcpmaster</code> fails with <code>EEXIST: file already exists</code></b></summary>
+
+```
+npm error code EEXIST
+npm error path /Users/you/.local/bin/mcpmaster
+npm error File exists: /Users/you/.local/bin/mcpmaster
+```
+
+The one-line installer already put a `mcpmaster` command at that path, and npm
+refuses to overwrite a file it didn't create. You don't need npm: run
+`mcpmaster update`, or the installer again. To move to the npm copy instead,
+remove the installer's file first:
+
+```sh
+rm ~/.local/bin/mcpmaster
+npm i -g mcpmaster@latest --prefer-online
+```
+
+`--force` also works, but overwrites the file without asking. Your integrations
+and credentials live in `~/.mcpmaster` and are not touched either way.
+
+</details>
+
+<details>
+<summary><b><code>npm update -g mcpmaster</code> says "up to date" but the version is old</b></summary>
+
+npm answers from cached registry data, or updated a different copy than the
+one that runs. Check, then bypass the cache:
+
+```sh
+mcpmaster --version                # what actually runs
+which -a mcpmaster                 # every copy on your PATH, in order
+npm i -g mcpmaster@latest --prefer-online
+mcpmaster update                   # or skip npm entirely
+```
+
+Still stale? `npm cache clean --force`. `npx mcpmaster …` keeps a separate
+cache: use `npx --yes mcpmaster@latest --version`, or `rm -rf ~/.npm/_npx`.
+
+</details>
+
+<details>
+<summary><b>The version changed but the web UI looks the same</b></summary>
+
+The background server keeps running the code it started with. Restart it:
+`mcpmaster stop && mcpmaster up`.
+
+</details>
+
+<a id="faq"></a>
+
+## ❓ FAQ
+
+<details>
+<summary><b>What is mcpmaster?</b></summary>
+
+A local MCP server that wraps every API and MCP server you use and serves them all through one connection. Add an OpenAPI spec, a GraphQL endpoint, a remote MCP server or a local stdio command, and every connected agent can use it.
+
+</details>
+
+<details>
+<summary><b>Why only one <code>execute</code> tool?</b></summary>
+
+Loading every schema up front can cost hundreds of thousands of tokens. With code mode the agent searches for tools and returns only what it needs. If your client can't run code, `mcpmaster settings tools all` lists every tool individually.
+
+</details>
+
+<details>
+<summary><b>Where are my credentials stored?</b></summary>
+
+In `~/.mcpmaster/secrets.json` with owner-only permissions, or read from an environment variable. The CLI and UI never display them, and they're stripped from any response that echoes them. Pass them with `--token-env` or `--token-stdin`, never as an argument.
+
+</details>
+
+<details>
+<summary><b>How is this different from mcpmaster Cloud?</b></summary>
+
+Self-hosted is the open-source core. Cloud runs the same engine and adds a hosted endpoint, team workspaces, private workspaces behind OAuth, Agent Secrets, crawling, a chat widget and an audit trail. You can use both at once.
+
+</details>
+
+<a id="develop"></a>
+
+## 🛠️ Develop
 
 ```sh
 git clone https://github.com/mcpmastersh/mcpmaster && cd mcpmaster
@@ -363,6 +507,12 @@ npm test
 State lives in `~/.mcpmaster`. Set `MCPMASTER_HOME` to use a different
 directory.
 
+## Brand
+
+Logo files, PNG exports and usage notes are in [`brand/`](brand/).
+
 ## License
 
 [Apache-2.0](LICENSE)
+
+<p align="center"><sub>Give your agent every tool. Keep every key.</sub></p>
