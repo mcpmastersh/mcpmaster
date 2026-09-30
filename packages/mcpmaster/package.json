@@ -1,6 +1,6 @@
 {
   "name": "mcpmaster",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Connect your agents to anything. One local MCP endpoint for every OpenAPI, GraphQL and MCP integration you use — with a web UI to manage them.",
   "license": "Apache-2.0",
   "type": "module",
