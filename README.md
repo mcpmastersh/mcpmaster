@@ -7,6 +7,11 @@
 <p align="center"><b>Connect your agents to anything.</b><br>
 One local MCP endpoint for every API and MCP server you use, with a web UI to manage them.</p>
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/mcpmaster-ui-dark.svg">
+  <img alt="The mcpmaster web UI at 127.0.0.1:7437: five integrations (github, stripe, linear, countries, files) with 1,642 tools behind one endpoint, while Claude Code calls the single execute tool with a short snippet that returns only the issue titles." src="docs/mcpmaster-ui-light.svg" width="100%">
+</picture>
+
 ---
 
 Paste an OpenAPI spec, a GraphQL endpoint, a remote MCP server or the command
