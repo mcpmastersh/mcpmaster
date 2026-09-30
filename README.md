@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="brand/mcpmaster-logo-dark.svg">
-    <img src="brand/mcpmaster-logo-light.svg" width="56" height="56" alt="mcpmaster">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/brand/mcpmaster-logo-dark.svg">
+    <img src="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/brand/mcpmaster-logo-light.svg" width="56" height="56" alt="mcpmaster">
   </picture>
 </p>
 
@@ -18,11 +18,11 @@ One local MCP endpoint for every API and MCP server you use, with a web UI to ma
   <a href="https://mcpmaster.sh/"><img alt="Cloud: mcpmaster.sh" src="https://img.shields.io/badge/cloud-mcpmaster.sh-121216"></a>
 </p>
 
-<p align="center"><sub>Works with &nbsp; <img src="docs/icons/claude.svg" width="16" height="16" alt=""> Claude Code &nbsp;·&nbsp; <img src="docs/icons/codex.svg" width="16" height="16" alt=""> Codex &nbsp;·&nbsp; <img src="docs/icons/cursor.svg" width="16" height="16" alt=""> Cursor &nbsp;·&nbsp; <img src="docs/icons/claude.svg" width="16" height="16" alt=""> Claude Desktop &nbsp;·&nbsp; <img src="docs/icons/vscode.svg" width="16" height="16" alt=""> VS Code &nbsp;·&nbsp; <img src="docs/icons/windsurf.svg" width="16" height="16" alt=""> Windsurf &nbsp;·&nbsp; <img src="docs/icons/opencode.svg" width="16" height="16" alt=""> OpenCode &nbsp;·&nbsp; <img src="docs/icons/mcp.svg" width="16" height="16" alt=""> Streamable HTTP</sub></p>
+<p align="center"><sub>Works with &nbsp; <img src="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/docs/icons/claude.svg" width="16" height="16" alt=""> Claude Code &nbsp;·&nbsp; <img src="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/docs/icons/codex.svg" width="16" height="16" alt=""> Codex &nbsp;·&nbsp; <img src="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/docs/icons/cursor.svg" width="16" height="16" alt=""> Cursor &nbsp;·&nbsp; <img src="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/docs/icons/claude.svg" width="16" height="16" alt=""> Claude Desktop &nbsp;·&nbsp; <img src="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/docs/icons/vscode.svg" width="16" height="16" alt=""> VS Code &nbsp;·&nbsp; <img src="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/docs/icons/windsurf.svg" width="16" height="16" alt=""> Windsurf &nbsp;·&nbsp; <img src="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/docs/icons/opencode.svg" width="16" height="16" alt=""> OpenCode &nbsp;·&nbsp; <img src="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/docs/icons/mcp.svg" width="16" height="16" alt=""> Streamable HTTP</sub></p>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/mcpmaster-ui-dark.svg">
-  <img alt="The mcpmaster web UI at 127.0.0.1:7437: five integrations (github, stripe, linear, countries, files) with 1,642 tools behind one endpoint, while Claude Code calls the single execute tool with a short snippet that returns only the issue titles." src="docs/mcpmaster-ui-light.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/docs/mcpmaster-ui-dark.svg">
+  <img alt="The mcpmaster web UI at 127.0.0.1:7437: five integrations (github, stripe, linear, countries, files) with 1,642 tools behind one endpoint, while Claude Code calls the single execute tool with a short snippet that returns only the issue titles." src="https://raw.githubusercontent.com/mcpmastersh/mcpmaster/main/packages/mcpmaster/docs/mcpmaster-ui-light.svg" width="100%">
 </picture>
 
 ---
@@ -509,7 +509,7 @@ directory.
 
 ## Brand
 
-Logo files, PNG exports and usage notes are in [`brand/`](brand/).
+Logo files, PNG exports and usage notes are in [`brand/`](https://github.com/mcpmastersh/mcpmaster/tree/main/packages/mcpmaster/brand).
 
 ## License
 
