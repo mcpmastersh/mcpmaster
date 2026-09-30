@@ -6,6 +6,18 @@ uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-09-30
+
+### Changed
+
+- The web UI's header, sign-in screen and favicon use the new mcpmaster
+  logo, following your system's light/dark setting.
+
+### Fixed
+
+- README images (logo, client icons, UI screenshot) now load on npm and on
+  the GitHub repo page; they used relative paths that neither could resolve.
+
 ## [0.3.5] - 2026-09-30
 
 ### Changed
